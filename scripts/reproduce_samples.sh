@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 SAMPLES="${1:-data/samples}"
 export TRAFFICEV_CACHE="${TRAFFICEV_CACHE:-data/cache}"
 
-if [ -z "$(ls "$SAMPLES"/*.mp4 2>/dev/null)" ]; then
+if [ -z "$(ls "$SAMPLES"/*.mp4 "$SAMPLES"/*.MP4 2>/dev/null)" ]; then
   python scripts/fetch_samples.py --out "$SAMPLES"
 fi
 TRAFFICEV_EXACT=1 python run_submission.py --videos "$SAMPLES" --out predictions_samples.json \

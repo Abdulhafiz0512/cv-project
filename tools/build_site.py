@@ -49,7 +49,7 @@ def main() -> int:
     out = Path(args.out)
     pred = json.loads(Path(args.pred).read_text())
     src = Path(args.videos)
-    vids = [src] if src.is_file() else sorted(src.glob("*.mp4"))
+    vids = [src] if src.is_file() else sorted(p for p in src.iterdir() if p.suffix.lower() == ".mp4")
     (out / "data").mkdir(parents=True, exist_ok=True)
     shutil.copy(args.pred, out / "data" / "predictions_samples.json")
 

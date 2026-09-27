@@ -38,7 +38,7 @@ def main() -> int:
 
     gt = json.loads(Path(args.gt).read_text())
     gt = gt.get("videos", gt)
-    videos = {p.name: p for p in sorted(Path(args.videos).glob("*.mp4")) if p.name in gt}
+    videos = {p.name: p for p in sorted(Path(args.videos).iterdir()) if p.name in gt}
     pred = {name: {"events": predict(path, tuple(args.only) if args.only else None)} for name, path in videos.items()}
     gt = {k: v for k, v in gt.items() if k in videos}
     rep = evaluate.evaluate_part_a(gt, pred, per_video=args.per_video)

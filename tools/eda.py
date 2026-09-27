@@ -162,7 +162,7 @@ def main() -> int:
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
     src = Path(args.videos)
-    vids = [src] if src.is_file() else sorted(src.glob("*.mp4"))
+    vids = [src] if src.is_file() else sorted(p for p in src.iterdir() if p.suffix.lower() == ".mp4")
     index = {}
     for v in vids:
         st = analyse(v, Path(args.out) / v.stem)
