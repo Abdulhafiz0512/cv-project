@@ -32,8 +32,9 @@ from trafficev.detector import Detector  # noqa: E402
 from trafficev.risk import CausalRiskModel  # noqa: E402
 from trafficev.video import probe  # noqa: E402
 
-MAX_SECONDS = 150
-MAX_MB = 600
+MAX_SECONDS = 90
+MAX_MB = 800
+WORK_HEIGHT = 720   # larger uploads (the camera writes 4K) are shrunk first: decoding dominates on a CPU
 
 _detector: Detector | None = None
 
@@ -62,6 +63,11 @@ def analyse(video_path: str | None, progress=gr.Progress()):
         raise gr.Error(f"The clip is {info.duration:.0f} s long; the demo accepts up to {MAX_SECONDS} s. "
                        "Trim it and upload again.")
 
+    out_dir = Path(tempfile.mkdtemp(prefix="trafficev_"))
+    if info.height > WORK_HEIGHT:
+        progress(0.0, desc="Preparing the video")
+        video_path = _shrink(video_path, out_dir / "input_720p.mp4")
+
     model = CausalRiskModel(detector)
     model.reset({"fps": info.fps})
     curve: list[list[float]] = []
@@ -71,12 +77,11 @@ def analyse(video_path: str | None, progress=gr.Progress()):
         progress(0.75 * t / max(info.duration, 1e-6), desc="Detecting and tracking road users")
 
     per = pipeline.perceive(video_path, budget_s=1e9, target_fps=demo_fps(), detector=detector(), on_frame=on_frame)
-    events = pipeline.events_from(per)
+    events, evidence = pipeline.explain(per)
     risk = _smooth(curve)
 
-    out_dir = Path(tempfile.mkdtemp(prefix="trafficev_"))
     annotated = out_dir / "annotated.mp4"
-    render(video_path, per, events, risk, str(annotated), fps=demo_fps(),
+    render(video_path, per, events, risk, str(annotated), fps=demo_fps(), evidence=evidence,
            progress=lambda f: progress(0.75 + 0.25 * f, desc="Rendering the annotated video"))
 
     table = pd.DataFrame([{"class": lab, "start (s)": s, "end (s)": e, "length (s)": round(e - s, 1)}
@@ -88,6 +93,19 @@ def analyse(video_path: str | None, progress=gr.Progress()):
     summary = (f"{len(events)} event(s) in {info.duration:.0f} s of video."
                if events else f"No traffic events found in {info.duration:.0f} s of video.")
     return str(annotated), summary, table, risk_df, str(result)
+
+
+def _shrink(src: str, dst: Path) -> str:
+    """720p H.264 copy with the same frames and timing (what the pipeline downsizes to anyway)."""
+    import subprocess
+
+    import imageio_ffmpeg
+
+    subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-hide_banner", "-loglevel", "error", "-y", "-i", src,
+                    "-map", "0:v:0", "-vf", f"scale=-2:{WORK_HEIGHT}:flags=area", "-fps_mode", "passthrough",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "20", "-pix_fmt", "yuv420p", str(dst)],
+                   check=True)
+    return str(dst)
 
 
 def _smooth(curve: list[list[float]], tau: float = 2.0) -> list[list[float]]:
@@ -105,11 +123,11 @@ def _smooth(curve: list[list[float]], tau: float = 2.0) -> list[list[float]]:
 with gr.Blocks(title="Traffic event detection — live demo") as app:
     gr.Markdown(
         "## Traffic event detection — live demo\n"
-        f"Upload an .mp4 from the junction camera (up to {MAX_SECONDS} s and {MAX_MB} MB). "
-        "With a GPU a two-minute clip takes about a minute; on a CPU expect four to six minutes per minute "
-        "of video. The progress bar shows each stage. "
-        "You get the detected events, an annotated playback with the event timeline under the video, "
-        "and the accident-risk curve.")
+        f"Upload an .mp4 from the junction camera, up to {MAX_SECONDS} seconds ({MAX_MB} MB). "
+        "A 1080p or 720p clip uploads much faster than the camera's 4K original; 4K is shrunk to 720p first. "
+        "On this free CPU host, expect a few minutes of processing per minute of video; the progress bar "
+        "shows each stage. You get the detected events, an annotated playback with the event timeline under "
+        "the video, and the accident-risk curve.")
     with gr.Row():
         with gr.Column(scale=1):
             inp = gr.Video(label="Video", sources=["upload"], format="mp4")
