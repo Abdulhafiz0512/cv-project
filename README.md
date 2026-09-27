@@ -16,8 +16,9 @@ python run_submission.py --videos /data/test --out predictions.json
 python evaluate.py --pred predictions.json --validate-only
 ```
 
-- **Python 3.10+.** On Linux the default `torch` wheel bundles CUDA and uses the T4 automatically; with
-  no GPU the same code runs on the CPU.
+- **Python 3.10+.** On Linux the default `torch` wheel bundles CUDA and uses the T4 automatically. On an
+  Apple-silicon Mac the Apple GPU (MPS) is used, falling back to the CPU if it fails at start-up; with no
+  GPU at all the same code runs on the CPU.
 - **Weights.** `weights/yolo26s.pt` (20 MB) is committed. If a checkout lacks it, run
   `bash weights/download.sh` once with internet; it downloads the file and checks its SHA-256.
 - **Offline.** No network access at run time: `YOLO_OFFLINE=1` is set before Ultralytics is imported, the

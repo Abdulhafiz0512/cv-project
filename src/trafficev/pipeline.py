@@ -39,7 +39,7 @@ _detector: Detector | None = None
 
 def reduced() -> bool:
     """True on CPU-only machines unless exact (reference) settings are forced."""
-    return not runtime.EXACT and runtime.device() == "cpu"
+    return not runtime.EXACT and not runtime.is_gpu(runtime.device())
 
 
 def get_detector() -> Detector:
@@ -47,7 +47,13 @@ def get_detector() -> Detector:
     global _detector
     if _detector is None:
         _detector = Detector(imgsz=CPU_IMGSZ if reduced() else 1280)
-        _detector([np.zeros((PROC_H, PROC_W, 3), np.uint8)])  # CUDA context, kernels, lazy init
+        try:
+            _detector([np.zeros((PROC_H, PROC_W, 3), np.uint8)])  # GPU context, kernels, lazy init
+        except Exception:  # noqa: BLE001 - an unusable Apple GPU must not stop the run
+            if _detector.device == "cuda:0":
+                raise
+            _detector = Detector(imgsz=_detector.imgsz, device="cpu")
+            _detector([np.zeros((PROC_H, PROC_W, 3), np.uint8)])
     return _detector
 
 
@@ -119,7 +125,7 @@ def perceive(path: str, budget_s: float | None = None, target_fps: float = TARGE
     store = TrackStore(PROC_W, PROC_H)
     lamps = signals.LampMeter()
     budget = runtime.Budget(budget_s if budget_s is not None else PART_A_SHARE * max(info.duration, 1.0))
-    batch_size = 8 if det.device.startswith("cuda") else 1
+    batch_size = 8 if runtime.is_gpu(det.device) else 1
     batch: list[tuple[float, np.ndarray]] = []
     times: list[float] = []
     thin, n, complete = 1, 0, True

@@ -43,9 +43,19 @@ def configure() -> None:
 
 
 def device() -> str:
+    """NVIDIA GPU (the organizers' T4) > Apple-silicon GPU (MPS) > CPU."""
     import torch
 
-    return "cuda:0" if torch.cuda.is_available() else "cpu"
+    if torch.cuda.is_available():
+        return "cuda:0"
+    mps = getattr(torch.backends, "mps", None)
+    if mps is not None and mps.is_available():
+        return "mps"
+    return "cpu"
+
+
+def is_gpu(dev: str) -> bool:
+    return dev != "cpu"
 
 
 @dataclass

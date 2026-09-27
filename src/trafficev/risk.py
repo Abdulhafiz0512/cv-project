@@ -121,7 +121,7 @@ class CausalRiskModel:
     def reset(self, meta: dict) -> None:
         if self.det is None:
             self.det = self._detector_factory()
-        on_gpu = self.det.device.startswith("cuda") or runtime.EXACT
+        on_gpu = runtime.is_gpu(self.det.device) or runtime.EXACT
         fps = float(meta.get("fps") or 25.0)
         self.stride = max(1, round(fps / (RISK_HZ if on_gpu else CPU_RISK_HZ)))
         self.store = TrackStore(PROC_W, PROC_H)

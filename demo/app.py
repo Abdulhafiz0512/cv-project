@@ -41,14 +41,14 @@ _detector: Detector | None = None
 def detector() -> Detector:
     global _detector
     if _detector is None:
-        import torch
+        from trafficev import runtime
 
-        _detector = Detector(imgsz=1280 if torch.cuda.is_available() else 960)
+        _detector = Detector(imgsz=1280 if runtime.is_gpu(runtime.device()) else 960)
     return _detector
 
 
 def demo_fps() -> float:
-    return pipeline.TARGET_FPS if detector().device.startswith("cuda") else 4.0
+    return pipeline.TARGET_FPS if detector().device != "cpu" else 4.0
 
 
 def analyse(video_path: str | None, progress=gr.Progress()):
