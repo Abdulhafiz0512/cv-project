@@ -2,30 +2,41 @@
   "members": [
     {
       "name": "Abdulkhafiz Yoqubjonov",
-      "role": "Perception and pipeline",
+      "role": "Computer vision pipeline and website",
+      "bio": "Full-stack developer (React, Next.js, TypeScript, Vue) who builds AI agents, and took on applied computer vision for this hackathon.",
+      "skills": ["Python", "PyTorch / Ultralytics", "OpenCV", "React", "Next.js", "TypeScript", "Vue"],
       "contributions": [
-        "Detector, tracker and the time-budgeted decode pipeline",
-        "Scene layout measurement and the event rules",
-        "Evaluation tooling and this website"
+        "Decode, detection and tracking pipeline that fits the 3x time budget on 4K video",
+        "Hand-measured scene layout and the rules for the twelve predicted classes",
+        "Causal accident-risk estimator (Part B)",
+        "Evaluation, EDA and rendering tools, the live demo and this website"
       ],
+      "github": "https://github.com/Abdulhafiz0512",
+      "linkedin": "",
+      "portfolio": "",
+      "projects": [
+        {"name": "medX", "url": "https://med-x-nine.vercel.app", "repo": "https://github.com/Abdulhafiz0512/medX", "about": "Medical web app (JavaScript)"},
+        {"name": "Tower game", "url": "https://tower-game-nine.vercel.app", "repo": "https://github.com/Abdulhafiz0512/tower-game", "about": "Browser stacking game"},
+        {"name": "foothub", "url": "", "repo": "https://github.com/Abdulhafiz0512/foothub", "about": "Python project"}
+      ]
+    },
+    {
+      "name": "Teammate 2 (name pending)",
+      "role": "Role pending",
+      "bio": "",
+      "skills": [],
+      "contributions": [],
       "github": "",
       "linkedin": "",
       "portfolio": "",
       "projects": []
     },
     {
-      "name": "Teammate 2 (add name)",
-      "role": "Add role",
-      "contributions": ["Add what you did"],
-      "github": "",
-      "linkedin": "",
-      "portfolio": "",
-      "projects": []
-    },
-    {
-      "name": "Teammate 3 (add name)",
-      "role": "Add role",
-      "contributions": ["Add what you did"],
+      "name": "Teammate 3 (name pending)",
+      "role": "Role pending",
+      "bio": "",
+      "skills": [],
+      "contributions": [],
       "github": "",
       "linkedin": "",
       "portfolio": "",

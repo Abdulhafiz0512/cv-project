@@ -76,11 +76,14 @@ def main() -> int:
         })
         print(f"{v.name}: {len(entry['events'])} events", flush=True)
 
+    previous = {}
+    if (out / "data" / "site.json").exists():  # keep links set earlier with tools/set_site_links.py
+        previous = json.loads((out / "data" / "site.json").read_text(encoding="utf-8"))
     site = {
         "generated": time.strftime("%Y-%m-%d"),
         "team": pred.get("team", ""),
-        "demo_url": args.demo_url,
-        "repo_url": args.repo_url,
+        "demo_url": args.demo_url or previous.get("demo_url", ""),
+        "repo_url": args.repo_url or previous.get("repo_url", ""),
         "classes": CLASSES,
         "videos": videos,
     }

@@ -149,3 +149,5 @@ th { font-weight: 600; }
 .person ul { padding-left: 1.1rem; margin: 0.4rem 0; }
 .person .links { display: flex; gap: 0.9rem; flex-wrap: wrap; }
 .foot { padding: 2rem clamp(1rem, 4vw, 3rem); color: var(--muted); font-size: 0.9rem; border-top: 3px dashed var(--lane); }
+.person h4 { font-family: "Barlow Semi Condensed", sans-serif; font-size: 1.05rem; font-weight: 600; margin: 0.9rem 0 0.2rem; }
+.person .skills { color: var(--muted); font-size: 0.95rem; }

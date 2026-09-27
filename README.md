@@ -183,6 +183,24 @@ python tools/render.py --video data/samples/C3905.mp4 --pred predictions_samples
   with `src/`, `tools/render.py`, `weights/` and `demo/requirements.txt`. On CPU it runs one causal pass
   at 4 fps with a 960 px detector for both the events and the risk curve.
 
+### Running the live demo on another computer
+
+1. Install Python 3.10–3.12 and git, then clone:
+   `git clone https://github.com/Abdulhafiz0512/cv-project && cd cv-project`
+2. Start it:
+   - **Windows:** double-click `demo\run_demo.bat`.
+   - **Linux/macOS:** `bash demo/run_demo.sh`.
+
+   The first run creates `.venv-demo` and installs the dependencies.
+3. The console prints a public `https://….gradio.live` link (valid 72 h while the computer stays on) and
+   `http://<computer-ip>:7860` for the local network. Put the public link on the website:
+   `python tools/set_site_links.py --demo-url https://….gradio.live`, then commit and push. GitHub Pages
+   redeploys in about a minute.
+4. With an NVIDIA GPU and CUDA drivers the demo uses the submission's settings (1280 px, 10 fps)
+   automatically; on a CPU it uses 960 px at 4 fps.
+5. For a link that outlives 72 h, deploy to a Space (`python demo/make_space.py --push <user>/junction-watch`
+   after `hf auth login`) or run a named Cloudflare tunnel to port 7860.
+
 ## Known limitations
 
 - The organizers' Drive links hit Google's download quota while we worked. Our checks used a 12 s 4K
@@ -194,6 +212,6 @@ python tools/render.py --video data/samples/C3905.mp4 --pred predictions_samples
 
 | Member | Role | Contributions |
 |---|---|---|
-| Abdulkhafiz Yoqubjonov | Perception and pipeline | detector/tracker pipeline, scene layout and rules, evaluation tooling, website |
+| Abdulkhafiz Yoqubjonov ([GitHub](https://github.com/Abdulhafiz0512)) | Computer vision pipeline and website | decode/detect/track pipeline, scene layout and rules, Part B risk, evaluation and EDA tools, demo, website |
 | *(add)* | | |
 | *(add)* | | |

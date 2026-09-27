@@ -49,7 +49,12 @@ def main() -> int:
     shutil.copy(ROOT / "weights" / "yolo26s.pt", out / "weights" / "yolo26s.pt")
     shutil.copy(ROOT / "tools" / "render.py", out / "tools" / "render.py")
     shutil.copy(ROOT / "demo" / "app.py", out / "app.py")
-    shutil.copy(ROOT / "demo" / "requirements.txt", out / "requirements.txt")
+    # Spaces run on CPU: the CPU torch wheel is ten times smaller than the CUDA one
+    runtime = (ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines()
+    demo = [l for l in (ROOT / "demo" / "requirements.txt").read_text(encoding="utf-8").splitlines()
+            if l.strip() and not l.startswith(("#", "-r"))]
+    lines = ["--extra-index-url https://download.pytorch.org/whl/cpu", *runtime, *demo]
+    (out / "requirements.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     if (ROOT / "demo" / "examples").exists():
         shutil.copytree(ROOT / "demo" / "examples", out / "demo" / "examples")
     (out / "README.md").write_text(FRONT_MATTER, encoding="utf-8")

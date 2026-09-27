@@ -1,11 +1,6 @@
---extra-index-url https://download.pytorch.org/whl/cpu
-numpy>=1.24,<3
-opencv-python-headless>=4.8
-torch>=2.4
-torchvision>=0.19
-ultralytics==8.4.163
-lap>=0.5.12
-av>=12.0
+# Demo dependencies: the submission's runtime plus the web UI and the video encoder.
+# On a machine with an NVIDIA GPU the default torch wheel uses CUDA automatically.
+-r ../requirements.txt
 imageio-ffmpeg>=0.5
 pandas>=2.0
 gradio>=5.0

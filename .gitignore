@@ -8,3 +8,4 @@ __pycache__/
 weights/*
 !weights/yolo26s.pt
 !weights/download.sh
+.venv-demo/

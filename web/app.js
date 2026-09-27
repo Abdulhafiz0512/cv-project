@@ -263,9 +263,16 @@ function renderTeam(team) {
     const d = document.createElement("article");
     d.className = "person";
     const links = [["GitHub", m.github], ["LinkedIn", m.linkedin], ["Portfolio", m.portfolio]].filter(([, u]) => u);
+    const projects = (m.projects || []).map((p) => {
+      const name = p.url ? `<a href="${p.url}">${p.name}</a>` : p.name;
+      const code = p.repo ? ` (<a href="${p.repo}">code</a>)` : "";
+      return `<li>${name}${code}${p.about ? `: ${p.about}` : ""}</li>`;
+    }).join("");
     d.innerHTML = `<h3>${m.name}</h3><p class="role">${m.role}</p>` +
-      `<ul>${(m.contributions || []).map((c) => `<li>${c}</li>`).join("")}</ul>` +
-      (m.projects && m.projects.length ? `<p>Proud of: ${m.projects.map((p) => p.url ? `<a href="${p.url}">${p.name}</a>` : p.name).join(", ")}</p>` : "") +
+      (m.bio ? `<p>${m.bio}</p>` : "") +
+      ((m.contributions || []).length ? `<h4>In this project</h4><ul>${m.contributions.map((c) => `<li>${c}</li>`).join("")}</ul>` : "") +
+      ((m.skills || []).length ? `<p class="skills">${m.skills.join(", ")}</p>` : "") +
+      (projects ? `<h4>Previous projects</h4><ul>${projects}</ul>` : "") +
       `<p class="links">${links.map(([k, u]) => `<a href="${u}">${k}</a>`).join("")}</p>`;
     list.appendChild(d);
   }
