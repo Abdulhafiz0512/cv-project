@@ -7,8 +7,8 @@ const CLASS_INFO = {
   wrong_way: ["#d864d8", "Moving against the one-way direction of the divided carriageway for 1.5 s and 2.5 box heights."],
   illegal_u_turn: ["#a78bfa", "The heading turns by 150° or more on the carriageway, with no identity jump in the track."],
   stopped_vehicle: ["#f5d90a", "Stationary 10 s or more on a road link: not in the signal queue, the junction, a zebra approach, parking or the bus bay, and not queued behind another car."],
-  jaywalking: ["#4cc38a", "A pedestrian at least half a body height inside the carriageway and away from every zebra for 1.2 s."],
-  failure_to_yield: ["#3ecfe0", "A vehicle drives through a zebra while a pedestrian on the same zebra is within three vehicle heights."],
+  jaywalking: ["#4cc38a", "A person on foot (slower than an e-scooter) at least half a body height inside the carriageway and away from every zebra for 1.2 s."],
+  failure_to_yield: ["#3ecfe0", "A vehicle, or a ridden two-wheeler, drives through a zebra while a pedestrian on the same zebra is within three vehicle heights."],
   illegal_turn: ["#8da4ef", null],
   solid_line_crossing: ["#f0f0f0", "The ground point crosses the solid line along the median."],
   stop_line: ["#ffb224", "A vehicle stands still for 3 s past the stop line, between it and the far edge of the zebra."],
@@ -281,6 +281,16 @@ function renderLinks(site) {
   $("#links-list").innerHTML = items.map((i) => `<li>${i}</li>`).join("");
 }
 
+function renderAblations(ab) {
+  if (!ab) return;
+  $("#ablation-detectors tbody").innerHTML = ab.detectors.map((r) =>
+    `<tr><td>${r.detector}</td><td>${r.imgsz} px</td><td>${r.ms_per_frame}</td>` +
+    `<td>${r.per_frame.vehicle + r.per_frame.two_wheeler}</td><td>${r.per_frame.person}</td>` +
+    `<td>${r.tracks.vehicle + r.tracks.two_wheeler + r.tracks.person}</td><td>${r.events}</td></tr>`).join("");
+  $("#ablation-decode tbody").innerHTML = ab.decode.map((r) =>
+    `<tr><td>${r.reader}</td><td>${r.frames_out}</td><td>${r.realtime_factor}</td></tr>`).join("");
+}
+
 (async function main() {
   const site = (await getJSON("data/site.json")) || { classes: Object.keys(CLASS_INFO), videos: [] };
   const team = await getJSON("data/team.json");
@@ -290,4 +300,5 @@ function renderLinks(site) {
   renderEDA(site);
   renderTeam(team);
   renderLinks(site);
+  renderAblations(await getJSON("data/ablations.json"));
 })();

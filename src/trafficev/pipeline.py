@@ -13,6 +13,7 @@ import os
 import pickle
 import queue
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,21 +23,31 @@ from . import events, runtime, signals
 from .detector import Detector
 from .kinematics import kinematics
 from .tracking import TrackStore, tracks_from_rows
-from .video import PROC_H, PROC_W, VideoInfo, probe, sample_frames
+from .video import PROC_H, PROC_W, VideoInfo, probe, sample_frames, sample_frames_cv2
 
 PART_A_SHARE = 1.1   # x video duration
 TARGET_FPS = 10.0    # I/P frames of the camera's IBBP GOP at 29.97 fps
+# CPU-only fallback (never used on the T4, nor with TRAFFICEV_EXACT=1): a
+# 960 px detector at 5 fps, since 4K decode alone eats most of a CPU's budget.
+CPU_TARGET_FPS = 5.0
+CPU_IMGSZ = 960
 MAX_THIN = 4         # thin to at most every 4th sampled frame when behind schedule
 ENABLED = tuple(events.RULES)
 
 _detector: Detector | None = None
 
 
+def reduced() -> bool:
+    """True on CPU-only machines unless exact (reference) settings are forced."""
+    return not runtime.EXACT and runtime.device() == "cpu"
+
+
 def get_detector() -> Detector:
-    """One model instance per process, shared by Part A and Part B."""
+    """One warmed-up model instance per process, shared by Part A and Part B."""
     global _detector
     if _detector is None:
-        _detector = Detector()
+        _detector = Detector(imgsz=CPU_IMGSZ if reduced() else 1280)
+        _detector([np.zeros((PROC_H, PROC_W, 3), np.uint8)])  # CUDA context, kernels, lazy init
     return _detector
 
 
@@ -53,7 +64,11 @@ class Perception:
 
 
 def _frames_async(path: str, target_fps: float, maxsize: int = 32):
-    """Decode on a producer thread; yields (t, frame) and finally None."""
+    """Decode on a producer thread and yield (t, frame).
+
+    If the PyAV reader fails mid-stream, the rest of the video is read with
+    OpenCV from the last timestamp rather than silently truncating Part A.
+    """
     q: queue.Queue = queue.Queue(maxsize=maxsize)
     stop = threading.Event()
 
@@ -63,13 +78,22 @@ def _frames_async(path: str, target_fps: float, maxsize: int = 32):
                 if stop.is_set():
                     break
                 q.put(item)
+        except Exception as exc:  # noqa: BLE001 - handed to the consumer
+            q.put(exc)
         finally:
             q.put(None)
 
     th = threading.Thread(target=produce, daemon=True)
     th.start()
+    last_t = -1.0
     try:
         while (item := q.get()) is not None:
+            if isinstance(item, Exception):
+                for t, frame in sample_frames_cv2(path, target_fps):
+                    if t > last_t:
+                        yield t, frame
+                break
+            last_t = item[0]
             yield item
     finally:
         stop.set()
@@ -112,17 +136,17 @@ def perceive(path: str, budget_s: float | None = None, target_fps: float = TARGE
 
     for t, frame in _frames_async(path, target_fps):
         n += 1
-        if n % thin:
-            continue
-        batch.append((t, frame))
-        if len(batch) >= batch_size:
-            flush()
-        if n % 20 == 0 and not runtime.EXACT:
+        if n % 10 == 0 and not runtime.EXACT:  # checked before thinning, so it runs at any thinning level
             if budget.remaining() < 0:
                 complete = False
                 break
             if not budget.on_track(t / max(info.duration, 1e-6)) and thin < MAX_THIN:
                 thin += 1
+        if n % thin:
+            continue
+        batch.append((t, frame))
+        if len(batch) >= batch_size:
+            flush()
     if batch:
         flush()
     per = Perception(info, np.asarray(times), store.rows, lamps.series(), complete)
@@ -130,8 +154,18 @@ def perceive(path: str, budget_s: float | None = None, target_fps: float = TARGE
     return per
 
 
+_started: dict[str, float] = {}
+
+
 def detect_events(path: str) -> list[list]:
-    return events_from(perceive(path))
+    _started[Path(path).name] = time.perf_counter()
+    return events_from(perceive(path, target_fps=CPU_TARGET_FPS if reduced() else TARGET_FPS))
+
+
+def started(video_id: str) -> float | None:
+    """When Part A began on this video. Part B uses it (a clock reading, never
+    any Part A result) to keep the whole video inside the 3x time budget."""
+    return _started.get(video_id)
 
 
 def events_from(per: Perception) -> list[list]:

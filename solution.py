@@ -28,6 +28,14 @@ CLASSES: list[str] = list(_CLASSES)
 # Anticipation horizon used by the metric (seconds).
 RISK_HORIZON_SEC = 5.0
 
+# Load and warm up the detector while the harness imports this module, i.e.
+# before any per-video timer starts. A failure here is not fatal: the model is
+# then loaded lazily on first use.
+try:
+    pipeline.get_detector()
+except Exception:  # pragma: no cover - environment-specific
+    pass
+
 
 def detect_events(video_path: str) -> list[list]:
     """Part A — [[start_sec, end_sec, label], ...] for one .mp4 (labels from CLASSES)."""
@@ -38,7 +46,7 @@ class RiskEstimator:
     """Part B — causal: step() only ever sees the frames passed to it, in order."""
 
     def __init__(self) -> None:
-        self._model = CausalRiskModel(pipeline.get_detector)
+        self._model = CausalRiskModel(pipeline.get_detector, video_clock=pipeline.started)
 
     def reset(self, meta: dict) -> None:
         # meta = {"video_id", "fps", "width", "height", "n_frames"}

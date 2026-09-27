@@ -33,10 +33,11 @@ from .tracking import TrackStore
 from .video import PROC_H, PROC_W, to_proc
 
 RISK_HZ = 5.0          # perception rate on a GPU
-CPU_RISK_HZ = 2.0      # the same on CPU-only machines
+CPU_RISK_HZ = 1.0      # the same on CPU-only machines
 HISTORY_S = 1.6        # per-track memory
 DECAY_TAU_S = 2.0
-STEP_BUDGET_S = 0.012  # target amortised cost of step() per video frame
+SLOW_DOWN_AT = 2.6     # projected total (Part A + B) in x duration: halve the perception rate
+STOP_AT = 2.85         # ... and here stop perceiving; the harness's hard limit is 3x
 HORIZON_S = 1.6        # footprint extrapolation horizon
 MOVERS = ("vehicle", "two_wheeler")
 
@@ -103,8 +104,18 @@ def _iou(a: np.ndarray, b: np.ndarray) -> float:
 
 
 class CausalRiskModel:
-    def __init__(self, detector_factory):
+    """Causal risk estimator.
+
+    detector_factory() returns the (shared) detector. video_clock(video_id), if
+    given, returns when Part A started on that video: a clock reading only, used
+    to keep Part A + Part B inside the harness's 3x budget. The perception rate is
+    fixed per device, so output does not depend on machine load unless the video
+    would otherwise run out of time.
+    """
+
+    def __init__(self, detector_factory, video_clock=None):
         self._detector_factory = detector_factory
+        self._video_clock = video_clock
         self.det = None
 
     def reset(self, meta: dict) -> None:
@@ -118,20 +129,38 @@ class CausalRiskModel:
         self.n = 0
         self.score = 0.0
         self.last_t = 0.0
-        self.cost = 0.0
+        self.n_frames = int(meta.get("n_frames") or 0)
+        self.duration = self.n_frames / fps if fps else 0.0
+        self.t_reset = time.perf_counter()
+        start = self._video_clock(meta.get("video_id", "")) if self._video_clock else None
+        self.t_video = start if start is not None else self.t_reset
+        self.slowed = self.stopped = False
 
     def step(self, frame: np.ndarray, t_sec: float) -> float:
         self.n += 1
-        if (self.n - 1) % self.stride:
+        if self.stopped or (self.n - 1) % self.stride:
             return self._decayed(t_sec)
-        t0 = time.perf_counter()
         det = self.det([to_proc(frame)])[0]
         rows = self.store.update(t_sec, det)
         raw = self.cues(t_sec, rows)["risk"]
         self.score = max(raw, self._decayed(t_sec))
         self.last_t = t_sec
-        self._adapt(time.perf_counter() - t0)
+        self._guard_deadline()
         return self.score
+
+    def _guard_deadline(self) -> None:
+        """Project the video's total time; shed perception before the 3x limit."""
+        if runtime.EXACT or self.duration <= 0 or self.n < 10:
+            return
+        now = time.perf_counter()
+        per_frame = (now - self.t_reset) / self.n          # includes the harness's own decode
+        projected = (now - self.t_video) + per_frame * max(self.n_frames - self.n, 0)
+        ratio = projected / self.duration
+        if ratio > STOP_AT:
+            self.stopped = True
+        elif ratio > SLOW_DOWN_AT and not self.slowed:
+            self.stride *= 2
+            self.slowed = True
 
     def cues(self, t: float, rows: np.ndarray) -> dict[str, float]:
         """Update track states with one frame of tracks and score every cue."""
@@ -159,14 +188,6 @@ class CausalRiskModel:
 
     def _decayed(self, t: float) -> float:
         return self.score * math.exp(-(t - self.last_t) / DECAY_TAU_S)
-
-    def _adapt(self, spent: float) -> None:
-        """Lower the perception rate if step() costs too much per video frame."""
-        if runtime.EXACT:
-            return
-        self.cost = 0.9 * self.cost + 0.1 * spent if self.cost else spent
-        if self.cost / self.stride > STEP_BUDGET_S and self.stride < 30:
-            self.stride += 1
 
     @staticmethod
     def _conflict(motions: dict[int, Motion]) -> float:

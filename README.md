@@ -58,7 +58,7 @@ Measured on a 4K frame and stored in a canonical 1920×1080 space:
 **Why the details matter:**
 - **Decode is the real cost.** The camera writes H.264 4:2:2 10-bit at about 147 Mbit/s with an IBBP
   GOP, and the harness decodes every frame again for Part B. Skipping non-reference frames yields
-  exactly the I/P frames, 10 fps, at 1.4× the speed of a full decode. Decoding runs on a producer
+  exactly the I/P frames, 10 fps, at 1.3× the speed of a full decode. Decoding runs on a producer
   thread, so it overlaps inference.
 - **Perspective-normalised speed.** Dividing image speed by an object's own box height cancels most of
   the scale change across this elevated view, so one "stationary" threshold (0.12 bh/s) works
@@ -82,7 +82,7 @@ Measured on a 4K frame and stored in a canonical 1920×1080 space:
 | illegal_u_turn | heading change ≥ 150° on the carriageway, no identity jump |
 | stopped_vehicle | still ≥ 10 s on a road link; not in queue / junction / zebra approach / parking / bus bay; not queued behind another vehicle; fragments at the same spot pooled |
 | jaywalking | pedestrian ≥ 0.45 body heights inside the carriageway and ≥ 0.6 body heights from every zebra for ≥ 1.2 s |
-| failure_to_yield | vehicle drives through a zebra while a pedestrian on that zebra is within 3 vehicle heights |
+| failure_to_yield | vehicle (or ridden two-wheeler, not a pushed bike) drives through a zebra while a pedestrian on that zebra is within 3 vehicle heights |
 | solid_line_crossing | ground point crosses the solid line along the median |
 | stop_line | still ≥ 3 s past the stop line, before the far edge of the zebra |
 | congestion | ≥ 6 vehicles in a one-way carriageway, ≥ 80 % crawling, longer than a signal cycle |
@@ -116,7 +116,8 @@ video and never reuses Part A.
 - Two runs on the same machine give the same `predictions.json`.
 - The only time-driven behaviour is a safety net for machines that are too slow for the budget:
   - Part A thins frames only when projected to exceed 1.1× the video duration.
-  - Part B lowers its rate only when `step()` costs more than 12 ms per frame.
+  - Part B halves its rate only if the whole video is projected to pass 2.6× the duration, and stops
+    perceiving at 2.85×.
   - On the T4 neither triggers.
 - `TRAFFICEV_EXACT=1` disables both, which is how `predictions_samples.json` is reproduced on slow
   hardware:
@@ -127,16 +128,24 @@ video and never reuses Part A.
 ## Time budget
 
 The harness allows 3× the video duration for Part A and Part B together, and Part B's loop decodes every
-4K frame. Part A is budgeted at 1.1× the duration:
-- decode ≈ 0.5–0.7× on 8 cores;
-- inference ≈ 0.2× on a T4, overlapped with decode.
+4K frame with OpenCV. Decoding is the dominant cost, so the budget is planned around it. Measured with
+`tools/ablation.py` on our 4-core laptop:
 
-Part B is the harness decode (≈ 1× on 8 cores) plus detection at 5 Hz (≈ 0.1× on a T4). The expected
-total is about 1.7–2× the duration on the organizers' machine.
+| Stage | Video seconds per wall second | Share of the duration |
+|---|---|---|
+| Part A decode (PyAV, B-frames skipped, producer thread) | 1.61 | 0.62× |
+| Part B decode (harness, `cv2.read` every frame) | 0.75 | 1.33× |
 
-On our development laptop (4-core i5-10210U, **no GPU**), a 12 s 4K excerpt took:
-- 58 s for Part A and 50 s for Part B in exact mode;
-- within the 3× budget in the default mode, which thins frames on CPU.
+- **On the T4.** YOLO26-S at 1280 px adds about 0.2× in Part A (overlapped with decoding) and about 0.1×
+  in Part B (5 Hz), for an expected total of about 2.1× on a machine no faster than our laptop.
+- **Outside the timer.** The model is loaded and warmed up while the harness imports `solution.py`.
+- **Safety nets.** Part A thins frames only if it is projected to exceed 1.1× the duration. Part B
+  reads the clock at which Part A started on the same video (a time, never a Part A result) and
+  projects the video's total: past 2.6× it halves its perception rate, past 2.85× it stops perceiving
+  and lets the score decay. The harness's hard limit is 3×.
+- **CPU-only fallback.** Without a GPU, Part A uses 960 px at 5 fps and Part B uses 1 Hz. On our laptop
+  the 12 s 4K excerpt finishes in 33.1 s against a 36.1 s budget. The fallback finds fewer events; the
+  reference settings are the GPU ones, reproduced anywhere with `TRAFFICEV_EXACT=1`.
 
 ## Repository layout
 
@@ -158,7 +167,7 @@ tests/                 geometry and rule tests on synthetic trajectories, end-to
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest                                        # 16 tests, ~20 s on CPU
+python -m pytest                                        # 17 tests, ~20 s on CPU
 python scripts/fetch_samples.py --out data/samples      # sample videos -> 1080p
 export TRAFFICEV_CACHE=data/cache                       # perception cache for fast rule iteration
 python tools/dev_eval.py --videos data/samples --gt labels/dev_labels.json

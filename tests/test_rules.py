@@ -90,3 +90,15 @@ def test_accident_needs_contact_and_abrupt_stop():
     careful = make_track(3, 2, 0.0, [(0.0, p - np.array([480.0, 0])), (2.0, p - np.array([130.0, 0])),
                                      (12.0, p - np.array([130.0, 0]))])
     assert events.accident(context([struck, careful], 12.0)) == []
+
+
+def test_fast_person_is_a_scooter_rider_not_a_jaywalker():
+    # 6 bh/s along the inbound lanes: far faster than anyone on foot
+    rider = make_track(1, 0, 0.0, [(0.0, norm(0.05, 0.20)), (3.0, norm(0.45, 0.42))])
+    assert events.jaywalking(context([rider], 5.0)) == []
+
+
+def test_pushed_bike_on_zebra_is_not_failure_to_yield():
+    ped = make_track(1, 0, 0.0, [(0.0, norm(0.30, 0.575)), (6.0, norm(0.40, 0.555))])
+    pushed = make_track(2, 3, 0.0, [(0.0, norm(0.28, 0.58)), (6.0, norm(0.38, 0.56))])  # walking pace
+    assert events.failure_to_yield(context([ped, pushed], 8.0)) == []

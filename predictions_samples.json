@@ -7,11 +7,6 @@
      0.0,
      12.045,
      "stopped_vehicle"
-    ],
-    [
-     9.51,
-     12.01,
-     "failure_to_yield"
     ]
    ],
    "risk": [
@@ -1459,9 +1454,9 @@
    "duration": 12.05,
    "budget_sec": 361.4,
    "errors": [],
-   "part_a_sec": 79.6,
-   "part_b_sec": 57.5,
-   "total_sec": 137.1
+   "part_a_sec": 65.5,
+   "part_b_sec": 52.6,
+   "total_sec": 118.1
   }
  }
 }

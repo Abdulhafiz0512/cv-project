@@ -3,7 +3,7 @@
 The camera writes 4K H.264 4:2:2 10-bit with an IBBP GOP. Decoding is the
 dominant cost of the whole submission, and the harness decodes every frame
 again for Part B, so Part A asks the decoder to skip non-reference (B)
-frames: that yields ~10 fps of I/P frames at ~1.4x the speed of a full
+frames: that yields ~10 fps of I/P frames at ~1.3x the speed of a full
 decode, already downscaled by swscale. OpenCV is the fallback reader.
 """
 from __future__ import annotations
@@ -64,7 +64,7 @@ def sample_frames(path: str, target_fps: float = 10.0, skip_bframes: bool = True
     try:
         import av  # noqa: F401
     except ImportError:
-        yield from _sample_cv2(path, target_fps)
+        yield from sample_frames_cv2(path, target_fps)
         return
     yield from _sample_av(path, target_fps, skip_bframes)
 
@@ -79,7 +79,9 @@ def _sample_av(path: str, target_fps: float, skip_bframes: bool) -> Iterator[tup
         if skip_bframes:
             stream.codec_context.skip_frame = "NONREF"
         tb = float(stream.time_base)
-        t0 = None
+        # origin = presentation time of the first frame, even if skipped B-frames
+        # (open GOP) mean the first *decoded* frame comes later
+        t0 = stream.start_time
         last = -1e9
         for frame in container.decode(stream):
             if frame.pts is None:
@@ -94,7 +96,8 @@ def _sample_av(path: str, target_fps: float, skip_bframes: bool) -> Iterator[tup
             yield float(t), img
 
 
-def _sample_cv2(path: str, target_fps: float) -> Iterator[tuple[float, np.ndarray]]:
+def sample_frames_cv2(path: str, target_fps: float) -> Iterator[tuple[float, np.ndarray]]:
+    """OpenCV reader: fallback when PyAV is missing or fails."""
     cap = cv2.VideoCapture(str(path))
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
     stride = max(1, round(fps / target_fps))

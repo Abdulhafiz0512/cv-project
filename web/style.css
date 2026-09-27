@@ -81,7 +81,7 @@ figcaption { font-size: 0.9rem; color: var(--muted); margin-top: 0.4rem; }
 .button.primary { background: var(--sign-blue); color: var(--sign-blue-ink); }
 
 /* sections are separated by a lane-marking rule: a dashed line, like the road */
-.band { padding: 2.75rem 0; border-top: 3px dashed var(--lane); }
+.band { padding: 2.75rem 0; border-top: 3px dashed var(--lane); scroll-margin-top: 4.5rem; }
 
 .demo-slot iframe { width: 100%; height: 980px; border: 0; background: var(--surface); border-radius: 4px; }
 .demo-slot .empty { background: var(--surface); padding: 1.25rem; border-radius: 4px; }
@@ -98,7 +98,9 @@ figcaption { font-size: 0.9rem; color: var(--muted); margin-top: 0.4rem; }
 
 /* the signature element: the event timeline drawn like lane markings */
 /* the road stays asphalt in both themes */
-.timeline-wrap { background: #2b3035; border-radius: 4px; padding: 0.5rem 0.75rem 0.75rem; margin-top: 0.75rem; }
+.timeline-wrap { background: #2b3035; border-radius: 4px; padding: 0.5rem 0.75rem 0.75rem; margin-top: 0.75rem; overflow-x: auto; }
+/* on phones the timeline keeps a readable scale and scrolls sideways */
+.timeline, .riskline { min-width: 680px; }
 .timeline, .riskline { width: 100%; display: block; }
 .timeline text, .riskline text { font-family: "Barlow Semi Condensed", sans-serif; font-size: 13px; fill: #e7e9e4; }
 .timeline .lane-line { stroke: #8a9096; stroke-dasharray: 10 8; stroke-width: 1; }

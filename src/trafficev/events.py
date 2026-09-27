@@ -13,6 +13,8 @@ the carriageway for >= 1 s; the segment spans stepping on -> stepping off).
 """
 from __future__ import annotations
 
+import sys
+import traceback
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -40,7 +42,7 @@ def _grown_runs(k: Kin, weak: np.ndarray, strong: np.ndarray, min_strong_s: floa
     """Runs of `weak` that contain a run of `strong` lasting >= min_strong_s."""
     out = []
     for i, j in runs(weak):
-        ok = any(k.t[b] - k.t[a] >= min_strong_s for a, b in runs(strong[i:j + 1]))
+        ok = any(k.t[i + b] - k.t[i + a] >= min_strong_s for a, b in runs(strong[i:j + 1]))
         if ok:
             out.append((float(k.t[i]), float(k.t[j])))
     return out
@@ -56,7 +58,9 @@ def jaywalking(ctx: Context) -> list[Interval]:
     out = []
     for k in ctx.of("person"):
         on_road = scene.on_road(k.foot) & ~scene.on_crosswalk(k.foot, margin_px=0.6 * k.scale)
-        deep = on_road & (scene.road_depth(k.foot) > 0.45 * k.scale)
+        # faster than ~4 m/s is a rider on something COCO has no class for (e-scooter), not a pedestrian
+        on_foot = k.rel_speed < 2.5
+        deep = on_road & on_foot & (scene.road_depth(k.foot) > 0.45 * k.scale)
         out += _grown_runs(k, on_road, deep, min_strong_s=1.2)
     return _finish(out, ctx.duration, max_gap=2.0, min_len=1.2)  # stepping over the median is one crossing
 
@@ -70,7 +74,8 @@ def failure_to_yield(ctx: Context) -> list[Interval]:
         for c in np.unique(cw[cw >= 0]):
             for i, j in runs(cw == c):
                 t0, t1 = k.t[i], k.t[j]
-                if t1 - t0 < 0.2 or k.rel_speed[i:j + 1].mean() < 0.6:
+                min_speed = 1.2 if k.kind == "two_wheeler" else 0.6  # a pushed bike is a pedestrian
+                if t1 - t0 < 0.2 or k.rel_speed[i:j + 1].mean() < min_speed:
                     continue  # stopped on the zebra is not "driving through"
                 if _pedestrian_in_path(k, i, j, c, peds, ped_cw):
                     out.append((float(t0), float(t1)))
@@ -104,11 +109,13 @@ def red_light(ctx: Context) -> list[Interval]:
             # another road user must be waiting at the line both before and after the crossing
             if not (signals.is_red(tc - 0.5, ctx.reds, k.tid) and signals.is_red(tc + 1.5, ctx.reds, k.tid)):
                 continue
-            after = np.flatnonzero(k.t > tc)
+            after = np.flatnonzero(k.t >= tc)
+            if len(after) == 0:
+                continue
             inside = scene.points_in_poly(k.foot[after], scene.JUNCTION) | scene.points_in_poly(
                 k.foot[after], scene.STOP_BOX)
             leave = after[np.argmin(inside)] if (~inside).any() else after[-1]
-            out.append((tc, float(k.t[leave])))
+            out.append((tc, max(float(k.t[leave]), tc + 0.5)))
     return _finish(out, ctx.duration, max_gap=0.0, min_len=0.5)
 
 
@@ -247,12 +254,18 @@ def _queued(vehicles: list[Kin], own: set, s: float, e: float, pos: np.ndarray, 
     for o in vehicles:
         if o.tid in own or o.t[-1] < s or o.t[0] > e:
             continue
+        still = o.still()
         for g, tg in enumerate(grid):
-            if o.t[0] <= tg <= o.t[-1]:
-                n = o.at(tg)
-                if o.track.cls == 5 and scene.points_in_poly(o.foot[n:n + 1], scene.BUS_BAY)[0]:
-                    continue
-                near[g] |= bool(o.still()[n] and np.linalg.norm(o.foot[n] - pos) < 3.0 * scale)
+            if not o.t[0] <= tg <= o.t[-1]:
+                continue
+            n = o.at(tg)
+            if not still[n]:
+                continue
+            if o.track.cls == 5 and scene.points_in_poly(o.foot[n:n + 1], scene.BUS_BAY)[0]:
+                continue
+            d = np.linalg.norm(o.foot[n] - pos)
+            # a second box on the very same car (car + truck detections) is not a queue
+            near[g] |= bool(0.3 * scale < d < 3.0 * scale)
     return near.mean() > 0.5 if len(grid) else False
 
 
@@ -269,7 +282,7 @@ def congestion(ctx: Context) -> list[Interval]:
             inside = scene.points_in_poly(k.foot, zone.poly)
             if not inside.any():
                 continue
-            gi = np.clip(np.searchsorted(grid, k.t[inside]) - 1, 0, len(grid) - 1)
+            gi = np.clip(np.searchsorted(grid, k.t[inside], side="right") - 1, 0, len(grid) - 1)
             spd = k.rel_speed[inside]
             for g in np.unique(gi):
                 present[g] += 1
@@ -359,6 +372,11 @@ def _contacts(users: list[Kin], step: float = 0.2, thr: float = 0.2) -> dict[tup
 def _collision_end(striker: Kin, struck: Kin, tc: float) -> float | None:
     if striker.kind not in VEHICLES:
         return None
+    # a track that simply ends (occluded by a bus) is no evidence of a stop
+    if striker.t[0] > tc - 1.0 or striker.t[-1] < tc + 4.0:
+        return None
+    if struck.kind in VEHICLES and struck.t[-1] < tc + 4.0:
+        return None
     n = striker.at(tc)
     if scene.points_in_poly(striker.foot[n:n + 1], scene.QUEUE_ZONE)[0]:
         return None
@@ -381,7 +399,10 @@ def _footprints(k: Kin) -> np.ndarray:
 
 
 def _idx(k: Kin, times: np.ndarray) -> np.ndarray:
-    return np.clip(np.searchsorted(k.t, times), 0, len(k.t) - 1)
+    """Nearest sample index for each time."""
+    hi = np.clip(np.searchsorted(k.t, times), 0, len(k.t) - 1)
+    lo = np.clip(hi - 1, 0, len(k.t) - 1)
+    return np.where(np.abs(k.t[lo] - times) <= np.abs(k.t[hi] - times), lo, hi)
 
 
 def near_miss(ctx: Context) -> list[Interval]:
@@ -401,7 +422,7 @@ def near_miss(ctx: Context) -> list[Interval]:
                 oi = o.at(k.t[i])
                 rel = o.foot[oi] - k.foot[i]
                 ahead = float(np.dot(rel, h))
-                side = abs(float(np.cross(h, rel)))
+                side = abs(float(h[0] * rel[1] - h[1] * rel[0]))
                 if not (0 < ahead < 2.5 * k.scale[i] and side < 1.0 * k.scale[i]):
                     continue
                 contact = any(_iou(_footprint(k, k.at(t)), _footprint(o, o.at(t))) > 0.2
@@ -437,10 +458,16 @@ RULES = {
 
 
 def run_rules(ctx: Context, enabled: tuple[str, ...] | None = None) -> list[list]:
+    """All enabled rules; a rule that raises loses only its own class."""
     events = []
     for label, rule in RULES.items():
         if enabled is not None and label not in enabled:
             continue
-        for s, e in rule(ctx):
+        try:
+            found = rule(ctx)
+        except Exception:  # noqa: BLE001 - isolate faults per class
+            traceback.print_exc(file=sys.stderr)
+            continue
+        for s, e in found:
             events.append([round(s, 2), round(e, 2), label])
     return sorted(events)

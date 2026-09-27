@@ -45,8 +45,10 @@ class Kin:
         return self.rel_speed < STILL_BHS
 
     def at(self, t: float) -> int:
-        """Index of the sample nearest to time t."""
-        return int(np.clip(np.searchsorted(self.t, t), 0, len(self.t) - 1))
+        """Index of the sample nearest to time t (clamped to the track's ends)."""
+        hi = int(np.clip(np.searchsorted(self.t, t), 0, len(self.t) - 1))
+        lo = max(hi - 1, 0)
+        return lo if abs(self.t[lo] - t) <= abs(self.t[hi] - t) else hi
 
 
 def kinematics(track: Track, pos_window: float = 0.8) -> Kin:
