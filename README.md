@@ -210,8 +210,8 @@ python tools/render.py --video data/samples/C3905.mp4 --pred predictions_samples
 
 ## Team
 
-| Member | Role | Contributions |
+| Member | Role | Contributions / responsibilities |
 |---|---|---|
 | Abdulkhafiz Yoqubjonov ([GitHub](https://github.com/Abdulhafiz0512)) | Computer vision pipeline and website | decode/detect/track pipeline, scene layout and rules, Part B risk, evaluation and EDA tools, demo, website |
-| *(add)* | | |
-| *(add)* | | |
+| Kamronbek Mamaroziqov | ML engineer: data, evaluation, model verification | responsible for the dev-set labels, per-class evaluation and error analysis, and a vision-language check of rare events (accident, fire) |
+| *(teammate 3, pending)* | | |

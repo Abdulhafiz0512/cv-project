@@ -271,6 +271,7 @@ function renderTeam(team) {
     d.innerHTML = `<h3>${m.name}</h3><p class="role">${m.role}</p>` +
       (m.bio ? `<p>${m.bio}</p>` : "") +
       ((m.contributions || []).length ? `<h4>In this project</h4><ul>${m.contributions.map((c) => `<li>${c}</li>`).join("")}</ul>` : "") +
+      ((m.responsibilities || []).length ? `<h4>Responsible for</h4><ul>${m.responsibilities.map((c) => `<li>${c}</li>`).join("")}</ul>` : "") +
       ((m.skills || []).length ? `<p class="skills">${m.skills.join(", ")}</p>` : "") +
       (projects ? `<h4>Previous projects</h4><ul>${projects}</ul>` : "") +
       `<p class="links">${links.map(([k, u]) => `<a href="${u}">${k}</a>`).join("")}</p>`;
