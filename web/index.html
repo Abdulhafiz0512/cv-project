@@ -125,45 +125,75 @@
 
   <section id="report" class="band prose">
     <h2>Report</h2>
+    <p class="lede">A short, honest account of how the project went: what we built, the problems we hit
+      on the way, and what we still have not solved.</p>
+
     <h3>What we built</h3>
-    <p>A one-command submission: <code>solution.py</code> calls a small package that decodes the 4K stream cheaply,
-      detects and tracks road users with YOLO26-S and ByteTrack, and turns trajectories into events with one
-      precision-first rule per class on a hand-measured layout of this junction. A separate causal pass produces
-      the accident-risk curve. It runs offline, is deterministic (fixed seeds, fp32 on every device), and stays
-      inside the 3× real-time budget with the organizers' own 4K decode for Part B included.</p>
+    <p>We did not train a model. With no labels for this camera, we decided early that rules we can read and
+      test would beat a classifier we could not validate. So the system is a pretrained detector (YOLO26-S) and a
+      tracker (ByteTrack) that turn the video into trajectories, then one rule per event class that looks at those
+      trajectories against a map of the junction we measured by hand. Part B is a separate pass that only ever
+      sees past frames and scores how close road users are to colliding.</p>
+
+    <h3>What went wrong, and what we changed</h3>
+    <p><strong>We could barely get the data.</strong> The four sample videos are raw camera files, 2.3 to 6.2 GB
+      each, and our laptop had about 3 GB of free disk. On top of that, Google Drive answered full downloads with
+      "Quota exceeded", because every team was pulling the same links. We found that small byte-range requests
+      still went through, so we wrote a little proxy that feeds ffmpeg in bounded chunks and transcodes on the fly.
+      It got us the first 12 seconds of C3905 before Drive closed completely. Most of the development was done on
+      those 12 seconds plus synthetic trajectories in our tests.</p>
+    <p><strong>Our first run was over the time limit.</strong> The 12-second clip took 37.3 s against a 36.1 s
+      budget. We assumed the detector was the problem, but profiling showed it was decoding: the camera writes
+      4K, 10-bit, 4:2:2 video at about 147 Mbit/s, and the organizers' harness decodes every frame again for Part
+      B. On our laptop that harness decode alone runs at 0.75× real time. We cut our own decode cost by asking the
+      decoder to skip B-frames (the stream is IBBP, so we still get 10 frames per second), which took Part A's
+      decode from 1.22× to 1.61× real time. Loading the model while the harness imports our module, before its
+      timer starts, saved a few more seconds.</p>
+    <p><strong>The risk score fired all the time.</strong> Our first Part B used time-to-collision between
+      points, and on a normal 12 seconds of traffic it averaged 0.46 and peaked at 0.90, which would have been a
+      stream of false alarms. The camera sits high and looks along the road, so two cars in neighbouring lanes look
+      almost touching in the image. We switched to checking whether the ground footprints of two road users on
+      crossing paths are about to overlap. On the same clip the score now stays at 0.</p>
+    <p><strong>Parked cars "saw" a red light.</strong> The inbound signals face away from the camera, so we read
+      red from behaviour: a car waiting at the stop line. The first version counted cars parked on the left strip as
+      waiting cars, so the whole clip looked red. We added a parking zone to the map.</p>
+    <p><strong>The bus and the queue.</strong> stopped_vehicle first flagged the bus dwelling at its stop, then
+      cars creeping in a queue. When we added a rule that a car standing next to other stopped cars is a queue, it
+      went the other way and hid a car that really was stopped for the whole clip, because the bus next to it
+      counted as "the queue". A dwelling bus is no longer a queue neighbour.</p>
+    <p><strong>People beside the zebra.</strong> Pedestrians at the east crossing walk a metre or two next to the
+      paint, not on it, and our first road outline there was drawn too wide. Both produced jaywalking alarms. We
+      fixed the outline and made the zebra tolerance scale with each person's height.</p>
+    <p><strong>A bug that would have cost everything.</strong> A review of the code before submission found that
+      the near-miss rule used a NumPy call that raises an error on 2-D vectors in NumPy 2. Any video with a car
+      braking hard would have crashed Part A and been scored as empty. We fixed it and now run every rule in
+      isolation, so one broken rule cannot take the others down.</p>
+    <p><strong>A courier is not a car.</strong> The only failure_to_yield on our clip turned out to be a delivery
+      rider moving slowly along a zebra with pedestrians. Two-wheelers now need riding speed to count, and a person
+      moving faster than about 4 m/s is treated as a scooter rider, not a pedestrian.</p>
+
     <h3>What worked</h3>
-    <ul>
-      <li>Skipping B-frames in the decoder. The camera's IBBP stream gives 10 frames per second of I and P frames
-        at 1.3 times the speed of a full decode. Decoding, not the network, is the real cost of this task.</li>
-      <li>Speeds in box heights per second. One threshold for "stationary" works near the camera and near the
-        horizon without calibrating the camera.</li>
-      <li>Reading the signal from behaviour. The inbound signal heads face away from the camera; a vehicle
-        waiting at the stop line for two seconds is a reliable red.</li>
-      <li>Predicted overlap of ground footprints for the risk score. Point-distance time-to-collision fired all the
-        time on this oblique view, because cars in adjacent lanes look close; footprints on crossing paths do not.</li>
-      <li>Segment shaping with a strict core and loose edges, which keeps boundaries close to the annotation
-        conventions instead of the moment a threshold trips.</li>
-    </ul>
+    <p>Measuring speed in "box heights per second" instead of pixels was the most useful single idea: it cancels
+      most of the perspective, so one threshold for "standing still" works near the camera and at the far end of the
+      road. Reading the signal phase from waiting cars works where the lamps are not visible. Keeping a strict
+      condition for the core of an event and a looser one for its edges gives segment boundaries that follow the
+      annotation rules instead of the moment a threshold trips. Running the detector at 1280 px mattered: at 960 px
+      it found 42% fewer pedestrians (15.1 vs 26.1 per frame), mostly the crowd at the far bus stop.</p>
+
     <h3>What did not</h3>
-    <ul>
-      <li>We could not build a proper dev set. The organizers' Drive links hit Google's download quota on the
-        day we worked, so our checks used a 12-second 4K excerpt of one sample and synthetic trajectories.
-        Thresholds are hand-set, not tuned against labels.</li>
-      <li>illegal_turn and fire_smoke are not predicted. Neither can be told reliably from this view, and a false
-        prediction of a class that never occurs costs a whole class in the metric.</li>
-      <li>Accident and near-miss rules have never seen a real positive from this camera; they are conservative by
-        design and will miss low-speed contacts.</li>
-      <li>People who cross a metre or two beside a zebra sit on the boundary between crossing and jaywalking;
-        our margin is a judgement call.</li>
-    </ul>
+    <p>We never built a labelled dev set, so we cannot give you an F1 score, and every threshold is our best
+      judgement rather than a tuned value. We do not predict illegal_turn or fire_smoke: we could not make them
+      reliable from this view, and the metric punishes predicting a class that never occurs. The accident and
+      near-miss rules have never seen a real collision from this camera. And the line between "crossing next to
+      the zebra" and "jaywalking" is still a judgement call.</p>
+
     <h3>What we would do next</h3>
-    <ul>
-      <li>Label the full sample videos and tune every threshold against evaluate.py at IoU 0.7.</li>
-      <li>Add background modelling for stopped vehicles and obstacles, as the AI City Challenge winners did.</li>
-      <li>Verify rare-event candidates (accident, fire) with a small open vision-language model such as
-        Qwen3-VL-2B, which fits the 5 GB weight limit and the T4 when called only a few times per video.</li>
-      <li>A ground-plane homography from the zebra and lane markings, for metric speeds and time-to-collision.</li>
-    </ul>
+    <p>First, label the full sample videos and tune every rule against the official metric at IoU 0.7. Then add
+      background modelling for stopped vehicles and obstacles, which is what the AI City Challenge winners used, and
+      a small open vision-language model to double-check the rare accident and fire candidates; one around 2B
+      parameters fits the 5 GB weight limit and the T4 if it is only called a few times per video. A proper
+      ground-plane calibration from the zebra and lane markings would give us speeds in metres and a better risk
+      score.</p>
     <h3>Measurements</h3>
     <p>Ablations on the native 4K excerpt, measured on our CPU-only laptop with <code>tools/ablation.py</code>.
       The submission uses the first row and the first decoder.</p>
