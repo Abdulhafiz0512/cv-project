@@ -1,0 +1,100 @@
+{
+ "video": "C3905_first12s.mp4",
+ "machine": "4-core Intel i5-10210U laptop, no GPU",
+ "detectors": [
+  {
+   "detector": "yolo26s",
+   "imgsz": 1280,
+   "device": "cpu",
+   "ms_per_frame": 464.9,
+   "per_frame": {
+    "vehicle": 14.5,
+    "two_wheeler": 2.1,
+    "person": 26.1
+   },
+   "tracks": {
+    "vehicle": 25,
+    "two_wheeler": 4,
+    "person": 50
+   },
+   "events": 2,
+   "wall_s": 60.5
+  },
+  {
+   "detector": "yolo26s",
+   "imgsz": 960,
+   "device": "cpu",
+   "ms_per_frame": 252.0,
+   "per_frame": {
+    "vehicle": 13.8,
+    "two_wheeler": 1.3,
+    "person": 15.1
+   },
+   "tracks": {
+    "vehicle": 27,
+    "two_wheeler": 3,
+    "person": 31
+   },
+   "events": 3,
+   "wall_s": 34.5
+  },
+  {
+   "detector": "yolo11s",
+   "imgsz": 1280,
+   "device": "cpu",
+   "ms_per_frame": 562.9,
+   "per_frame": {
+    "vehicle": 14.9,
+    "two_wheeler": 2.0,
+    "person": 24.3
+   },
+   "tracks": {
+    "vehicle": 27,
+    "two_wheeler": 4,
+    "person": 48
+   },
+   "events": 3,
+   "wall_s": 73.5
+  },
+  {
+   "detector": "yolo26m",
+   "imgsz": 1280,
+   "device": "cpu",
+   "ms_per_frame": 1444.0,
+   "per_frame": {
+    "vehicle": 17.6,
+    "two_wheeler": 2.4,
+    "person": 29.1
+   },
+   "tracks": {
+    "vehicle": 33,
+    "two_wheeler": 3,
+    "person": 53
+   },
+   "events": 2,
+   "wall_s": 180.8
+  }
+ ],
+ "decode": [
+  {
+   "reader": "PyAV, B-frames skipped (submission)",
+   "frames_out": 121,
+   "realtime_factor": 1.61
+  },
+  {
+   "reader": "PyAV, full decode, 10 fps kept",
+   "frames_out": 121,
+   "realtime_factor": 1.22
+  },
+  {
+   "reader": "OpenCV grab every frame, retrieve every 3rd",
+   "frames_out": 120,
+   "realtime_factor": 1.07
+  },
+  {
+   "reader": "OpenCV read every frame (the harness's Part B loop)",
+   "frames_out": 359,
+   "realtime_factor": 0.75
+  }
+ ]
+}
