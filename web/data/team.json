@@ -97,16 +97,52 @@
       ]
     },
     {
-      "name": "Teammate 3 (name pending)",
-      "role": "Role pending",
-      "bio": "",
-      "skills": [],
+      "name": "Diyorbek Umaraliyev",
+      "role": "AI engineer: live demo, ablations and data analysis",
+      "bio": "Artificial Intelligence student at New Uzbekistan University (2023–2027) and AI engineer. Built an AI education platform with face-recognition attendance and Uzbek speech recognition on a FastAPI backend.",
+      "skills": [
+        "Python",
+        "Computer vision (face recognition)",
+        "Speech recognition",
+        "FastAPI",
+        "Reinforcement learning",
+        "NLP"
+      ],
       "contributions": [],
-      "responsibilities": [],
-      "github": "",
-      "linkedin": "",
-      "portfolio": "",
-      "projects": []
+      "responsibilities": [
+        "Live demo: hosting it on the GPU computer and keeping the public link up through judging",
+        "Ablations with numbers: detector A vs B, input size and frame rate, with and without tracking",
+        "EDA write-up for every sample video: the findings that shaped the solution"
+      ],
+      "github": "https://github.com/umaraliyev0101",
+      "linkedin": "https://www.linkedin.com/in/umaraliyev0101/",
+      "portfolio": "https://umaraliyev0101.github.io",
+      "projects": [
+        {
+          "name": "AI Education Platform",
+          "url": "",
+          "repo": "https://github.com/umaraliyev0101/AI_for_Education",
+          "about": "face-recognition attendance (FaceNet), Uzbek speech-to-text Q&A and live presentations for schools"
+        },
+        {
+          "name": "Smart-School-Vision",
+          "url": "",
+          "repo": "https://github.com/umaraliyev0101/Smart-School-Vision",
+          "about": "Python vision project"
+        },
+        {
+          "name": "Emotional support chatbot",
+          "url": "",
+          "repo": "https://github.com/umaraliyev0101/emotional_support_nlp",
+          "about": "NLP chatbot"
+        },
+        {
+          "name": "MNIST digit classification",
+          "url": "",
+          "repo": "https://github.com/umaraliyev0101/mnist-digits-classification",
+          "about": "image classification"
+        }
+      ]
     }
   ]
 }

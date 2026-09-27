@@ -28,7 +28,11 @@ Tick a box in a commit when it is done; the website's team section lists roles, 
       class, fits 5 GB and a T4) that answers yes/no on 4–8 frames around each accident or
       fire_smoke candidate; measure its cost per call against the 3x budget before enabling it
 
-## Teammate 3 — name pending
-- [ ] Team section: send name, role, GitHub, LinkedIn, portfolio and previous projects
-- [ ] Take one of: EDA write-up for every sample (findings that shaped the solution),
-      website polish on phones, or the ablation table (detector A vs B, frame rates)
+## Diyorbek Umaraliyev — live demo, ablations, data analysis
+- [ ] Live demo: on the GPU computer run `demoun_demo.bat`, check an upload end to end, and keep
+      the public link alive through judging (gradio.live links expire after 72 h: re-run and re-publish
+      with `tools/set_site_links.py`, or deploy a Space with `demo/make_space.py --push`)
+- [ ] Ablations with numbers on the samples: `tools/ablation.py` for detector and input size, plus
+      frame rate (5 / 10 fps) and with vs without tracking; add the table to the website report
+- [ ] EDA write-up: after `scripts/reproduce_samples.sh`, write two or three findings per sample
+      (lighting, density over time, where pedestrians cross) and how they shaped the rules

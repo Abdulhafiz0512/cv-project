@@ -53,7 +53,7 @@ only a 12 s 4K excerpt of C3905 was processed. Thresholds are hand-set, not tune
 5. **Demo link**: `demo\run_demo.bat` prints a gradio.live URL (72 h); publish it with
    `python tools/set_site_links.py --demo-url <url>`, commit, push. For a durable link:
    `hf auth login` then `python demo/make_space.py --push <user>/junction-watch`.
-6. **Team**: per-member tasks live in `docs/TASKS.md`; still missing: teammate 3, LinkedIn URLs.
+6. **Team**: per-member tasks live in `docs/TASKS.md`; all three members are filled in.
 7. Commit and push; Pages redeploys in about a minute.
 
 ## Useful facts

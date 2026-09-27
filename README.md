@@ -214,4 +214,4 @@ python tools/render.py --video data/samples/C3905.mp4 --pred predictions_samples
 |---|---|---|
 | Abdulkhafiz Yoqubjonov ([GitHub](https://github.com/Abdulhafiz0512), [LinkedIn](https://www.linkedin.com/in/abdulhafiz1205/)) | Computer vision pipeline and website | decode/detect/track pipeline, scene layout and rules, Part B risk, evaluation and EDA tools, demo, website |
 | Kamronbek Mamaroziqov ([GitHub](https://github.com/kmamaroziqov), [LinkedIn](https://www.linkedin.com/in/kmamaroziqov/)) | ML engineer: data, evaluation, model verification | responsible for the dev-set labels, per-class evaluation and error analysis, and a vision-language check of rare events (accident, fire) |
-| *(teammate 3, pending)* | | |
+| Diyorbek Umaraliyev ([GitHub](https://github.com/umaraliyev0101), [LinkedIn](https://www.linkedin.com/in/umaraliyev0101/)) | AI engineer: live demo, ablations, data analysis | responsible for hosting the live demo through judging, the ablation tables, and the EDA write-up for every sample |
