@@ -26,6 +26,8 @@ only a 12 s 4K excerpt of C3905 was processed. Thresholds are hand-set, not tune
 
 ## Remaining work, in order
 1. **Put the sample video(s) in `data/samples/`** (raw camera .MP4 is fine; `data/` is gitignored).
+   To move a sample over a slow link, shrink it first (5 GB -> ~50 MB, same frames and timing):
+   `python scripts/shrink_video.py C3896.MP4 C3896.mp4`
 2. **Reference predictions + website data** (runs the unchanged harness in exact mode):
    ```bash
    bash scripts/reproduce_samples.sh data/samples        # needs the venv's python first on PATH
