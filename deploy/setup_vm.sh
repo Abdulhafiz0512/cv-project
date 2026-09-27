@@ -14,6 +14,11 @@ SERVICE=junction-watch-demo
 
 echo "== packages"
 export DEBIAN_FRONTEND=noninteractive
+# Small free shapes (e.g. VM.Standard.E2.1.Micro, 1 GB) cannot hold torch + the model: add swap.
+if [ "$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)" -lt 3000 ] && [ ! -f /swapfile ]; then
+  fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+  echo "/swapfile none swap sw 0 0" >> /etc/fstab
+fi
 apt-get update -q
 apt-get install -y -q git python3 python3-venv python3-pip curl debian-keyring debian-archive-keyring \
   apt-transport-https libgl1 libglib2.0-0 iptables-persistent
