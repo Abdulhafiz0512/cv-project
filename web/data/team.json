@@ -86,7 +86,7 @@
           "name": "fine-tuning",
           "url": "",
           "repo": "https://github.com/kmamaroziqov/fine-tuning",
-          "about": "LLM fine-tuning work behind the Uzbek Qwen models"
+          "about": "LLM fine-tuning experiments"
         },
         {
           "name": "transcribe-bot",
