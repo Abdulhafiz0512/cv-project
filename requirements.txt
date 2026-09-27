@@ -1,0 +1,9 @@
+# Runtime dependencies (Python >= 3.10). On Linux the default torch wheel bundles
+# CUDA, so the same file serves the organizers' T4 and CPU-only machines.
+numpy>=1.24,<3
+opencv-python-headless>=4.8
+torch>=2.4
+torchvision>=0.19
+ultralytics==8.4.163   # pinned: the tracker API and model outputs are version-sensitive
+lap>=0.5.12            # linear assignment used by ByteTrack (installed up front: no runtime pip)
+av>=12.0               # PyAV: 4K decode with B-frame skipping (OpenCV is the fallback)

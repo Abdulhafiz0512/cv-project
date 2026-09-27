@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# raw/transcoded videos, caches and scratch renders stay local
+data/
+# only the shipped detector is versioned
+weights/*
+!weights/yolo26s.pt
+!weights/download.sh

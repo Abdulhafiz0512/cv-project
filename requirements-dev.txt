@@ -1,0 +1,4 @@
+-r requirements.txt
+# Development, EDA, rendering and tests (not needed by run_submission.py)
+imageio-ffmpeg>=0.5     # ffmpeg binary for scripts/fetch_samples.py and tools/render.py
+pytest>=8

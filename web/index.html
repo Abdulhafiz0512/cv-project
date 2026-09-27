@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Junction Watch — WIUT CV track</title>
+  <meta name="description" content="Traffic event detection and accident anticipation for a fixed 4K camera over a Tashkent T-junction: live demo, results on the sample videos, approach, EDA and report.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231B4F9C'/%3E%3Cpath d='M6 22h20M6 16h20M6 10h20' stroke='%23fff' stroke-width='3' stroke-dasharray='4 3'/%3E%3C/svg%3E">
+</head>
+<body>
+<header class="bar">
+  <a class="brand" href="#top">Junction Watch</a>
+  <nav aria-label="Sections">
+    <a href="#demo">Demo</a>
+    <a href="#results">Results</a>
+    <a href="#approach">Approach</a>
+    <a href="#eda">Data</a>
+    <a href="#report">Report</a>
+    <a href="#team">Team</a>
+  </nav>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="hero-text">
+      <h1>Every traffic event at one Tashkent junction, on a timeline.</h1>
+      <p class="lede">A fixed 4K camera looks over a T-junction. Our system reports each violation or incident it
+        sees as a time segment with one of 14 classes, and raises an accident-risk alarm using only the frames
+        seen so far.</p>
+      <p class="actions">
+        <a class="button primary" href="#demo">Try the live demo</a>
+        <a class="button" href="#results">Browse the sample videos</a>
+      </p>
+    </div>
+    <figure class="hero-figure">
+      <img src="assets/scene_layout.jpg" alt="The camera view with the hand-measured layout: inbound and outbound carriageways, the stop line, three zebra crossings, the junction box and the bus bay." width="1600" height="900">
+      <figcaption>The camera view with our hand-measured layout: one-way carriageways (arrows), the inbound stop
+        line (red), zebras (white), junction box, bus bay and parking strip.</figcaption>
+    </figure>
+  </section>
+
+  <section id="demo" class="band">
+    <h2>Live demo</h2>
+    <p>Upload an .mp4 from this camera, up to 150 seconds and 600 MB. The demo runs the same code on a shared CPU
+      at a lower frame rate, so a two-minute clip takes roughly ten minutes; a progress bar shows each stage.
+      You get the events, an annotated playback with the timeline, the risk curve, and a JSON file.</p>
+    <div id="demo-slot" class="demo-slot"></div>
+  </section>
+
+  <section id="results" class="band">
+    <h2>Results on the sample videos</h2>
+    <p>Each sample video annotated by our own renderer: boxes and track ids, the scene layout, active events in
+      the corner and the timeline under the picture. Click a segment on the timeline to jump to it.</p>
+    <div id="video-tabs" class="tabs" role="tablist" aria-label="Sample videos"></div>
+    <div class="player">
+      <video id="player" controls playsinline preload="metadata"></video>
+      <p id="player-empty" class="empty" hidden></p>
+    </div>
+    <div class="timeline-wrap">
+      <svg id="timeline" class="timeline" role="img" aria-label="Event timeline"></svg>
+      <svg id="riskline" class="riskline" role="img" aria-label="Accident risk curve"></svg>
+    </div>
+    <table id="events-table" class="events"><caption>Detected events</caption>
+      <thead><tr><th scope="col">Class</th><th scope="col">Start</th><th scope="col">End</th><th scope="col">Length</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="approach" class="band">
+    <h2>Approach</h2>
+    <p>A pretrained detector and a tracker turn the video into trajectories; everything after that is rules on
+      those trajectories and the scene layout. We did not train a model: without labels for this camera, rules we
+      can inspect beat a classifier we cannot validate.</p>
+    <ol class="pipeline">
+      <li><h3>Decode</h3><p>PyAV skips the B-frames of the camera's IBBP stream: 10 frames per second of 4K at 1.4 times the speed of a full decode, on its own thread, downscaled to 1280×720.</p></li>
+      <li><h3>Detect</h3><p>YOLO26-S at 1280 px finds cars, buses, trucks, motorcycles, bicycles, pedestrians and animals.</p></li>
+      <li><h3>Track</h3><p>ByteTrack links boxes into trajectories. Riders and drivers are folded into their vehicle so they never count as pedestrians.</p></li>
+      <li><h3>Normalise</h3><p>The ground point is the bottom centre of a box; speeds are in box heights per second, which cancels most of the perspective of this elevated view.</p></li>
+      <li><h3>Apply rules</h3><p>One rule per class on trajectories and the scene layout. The inbound signal faces away from the camera, so red is read from a vehicle waiting at the stop line.</p></li>
+      <li><h3>Shape segments</h3><p>A strict condition must hold for a minimum time; the segment then spans the looser condition around it, merged per class, to match the annotation conventions at IoU 0.7.</p></li>
+    </ol>
+    <h3>Accident risk (Part B)</h3>
+    <p>A separate, causal pass at 5 frames per second: ByteTrack online, then four cues fused into one
+      probability. Footprints of road users on crossing paths that are about to overlap; hard braking with someone
+      close ahead; wrong-way motion; and crossing the stop line while another vehicle waits. The score rises at
+      once and decays with a two-second time constant.</p>
+    <h3>What each class looks for</h3>
+    <div class="table-scroll">
+      <table class="rules">
+        <thead><tr><th scope="col">Class</th><th scope="col">Rule</th></tr></thead>
+        <tbody id="rules-body"></tbody>
+      </table>
+    </div>
+    <h3>Models and data</h3>
+    <ul class="plain">
+      <li>YOLO26-S detector, COCO-pretrained, Ultralytics, AGPL-3.0; used as is.</li>
+      <li>ByteTrack as shipped in Ultralytics 8.4.163.</li>
+      <li>No external training data. The sample videos were used only for layout measurement, EDA and our own checks.</li>
+    </ul>
+  </section>
+
+  <section id="eda" class="band">
+    <h2>What the sample videos show</h2>
+    <p>Where people and vehicles actually go, measured from our own tracks. The flow field is the evidence
+      behind the one-way directions we hard-coded; the heatmaps show where pedestrians cross outside the zebras.</p>
+    <div id="eda-tabs" class="tabs" role="tablist" aria-label="EDA per video"></div>
+    <dl id="eda-meta" class="meta"></dl>
+    <div class="figures">
+      <figure><img id="eda-background" alt="Median of key frames: the empty road"><figcaption>Median of key frames: the road with every moving object removed.</figcaption></figure>
+      <figure><img id="eda-flow" alt="Dominant direction of vehicle motion per cell"><figcaption>Dominant direction of vehicle motion per cell.</figcaption></figure>
+      <figure><img id="eda-traj" alt="Vehicle trajectories coloured by heading"><figcaption>Vehicle trajectories, coloured by heading.</figcaption></figure>
+      <figure><img id="eda-heat-veh" alt="Heatmap of moving vehicles"><figcaption>Where moving vehicles are.</figcaption></figure>
+      <figure><img id="eda-heat-ped" alt="Heatmap of pedestrians"><figcaption>Where pedestrians are.</figcaption></figure>
+    </div>
+    <div class="charts">
+      <figure><svg id="chart-counts" class="chart" role="img" aria-label="Road users per second"></svg><figcaption>Road users in view, per second.</figcaption></figure>
+      <figure><svg id="chart-speed" class="chart" role="img" aria-label="Vehicle speed distribution"></svg><figcaption>Moving-vehicle speed, box heights per second.</figcaption></figure>
+      <figure><svg id="chart-light" class="chart" role="img" aria-label="Brightness over time"></svg><figcaption>Mean brightness of key frames over time.</figcaption></figure>
+    </div>
+  </section>
+
+  <section id="report" class="band prose">
+    <h2>Report</h2>
+    <h3>What we built</h3>
+    <p>A one-command submission: <code>solution.py</code> calls a small package that decodes the 4K stream cheaply,
+      detects and tracks road users with YOLO26-S and ByteTrack, and turns trajectories into events with one
+      precision-first rule per class on a hand-measured layout of this junction. A separate causal pass produces
+      the accident-risk curve. It runs offline, is deterministic (fixed seeds, fp32 on every device), and stays
+      inside the 3× real-time budget with the organizers' own 4K decode for Part B included.</p>
+    <h3>What worked</h3>
+    <ul>
+      <li>Skipping B-frames in the decoder. The camera's IBBP stream gives 10 frames per second of I and P frames
+        at 1.4 times the speed of a full decode. Decoding, not the network, is the real cost of this task.</li>
+      <li>Speeds in box heights per second. One threshold for "stationary" works near the camera and near the
+        horizon without calibrating the camera.</li>
+      <li>Reading the signal from behaviour. The inbound signal heads face away from the camera; a vehicle
+        waiting at the stop line for two seconds is a reliable red.</li>
+      <li>Predicted overlap of ground footprints for the risk score. Point-distance time-to-collision fired all the
+        time on this oblique view, because cars in adjacent lanes look close; footprints on crossing paths do not.</li>
+      <li>Segment shaping with a strict core and loose edges, which keeps boundaries close to the annotation
+        conventions instead of the moment a threshold trips.</li>
+    </ul>
+    <h3>What did not</h3>
+    <ul>
+      <li>We could not build a proper dev set. The organizers' Drive links hit Google's download quota on the
+        day we worked, so our checks used a 12-second 4K excerpt of one sample and synthetic trajectories.
+        Thresholds are hand-set, not tuned against labels.</li>
+      <li>illegal_turn and fire_smoke are not predicted. Neither can be told reliably from this view, and a false
+        prediction of a class that never occurs costs a whole class in the metric.</li>
+      <li>Accident and near-miss rules have never seen a real positive from this camera; they are conservative by
+        design and will miss low-speed contacts.</li>
+      <li>People who cross a metre or two beside a zebra sit on the boundary between crossing and jaywalking;
+        our margin is a judgement call.</li>
+    </ul>
+    <h3>What we would do next</h3>
+    <ul>
+      <li>Label the full sample videos and tune every threshold against evaluate.py at IoU 0.7.</li>
+      <li>Add background modelling for stopped vehicles and obstacles, as the AI City Challenge winners did.</li>
+      <li>Verify rare-event candidates (accident, fire) with a small open vision-language model such as
+        Qwen3-VL-2B, which fits the 5 GB weight limit and the T4 when called only a few times per video.</li>
+      <li>A ground-plane homography from the zebra and lane markings, for metric speeds and time-to-collision.</li>
+    </ul>
+  </section>
+
+  <section id="team" class="band">
+    <h2>Team</h2>
+    <div id="team-list" class="team"></div>
+  </section>
+
+  <section id="links" class="band">
+    <h2>Links</h2>
+    <ul class="plain" id="links-list"></ul>
+  </section>
+</main>
+<footer class="foot"><p>WIUT Hackathon 2026, computer vision track. Footage belongs to the organizers.</p></footer>
+<script src="app.js" defer></script>
+</body>
+</html>
