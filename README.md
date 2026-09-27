@@ -88,7 +88,7 @@ layout. Part B registers from the frames it has already seen, so it stays causal
 | Class | Rule (see `src/trafficev/events.py`) |
 |---|---|
 | accident | footprints meet, then both road users stop abruptly (> 2.5 bh/s lost within 1 s) and stay still 3 s, outside the signal queue |
-| near_miss | hard braking (< −3 bh/s²) with a road user close ahead and no contact afterwards |
+| near_miss | hard braking (< −3 bh/s², box inside the frame) with a pedestrian or a moving vehicle close ahead and no contact afterwards |
 | red_light | crossing the inbound stop line while another vehicle of the same phase group waits at it before and after |
 | wrong_way | against the one-way direction for ≥ 1.5 s and ≥ 2.5 box heights |
 | illegal_u_turn | heading change ≥ 150° on the carriageway, measured only while moving > 0.8 bh/s and clear of the frame border, completed within 12 s, no identity jump |

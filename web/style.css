@@ -151,3 +151,10 @@ th { font-weight: 600; }
 .foot { padding: 2rem clamp(1rem, 4vw, 3rem); color: var(--muted); font-size: 0.9rem; border-top: 3px dashed var(--lane); }
 .person h4 { font-family: "Barlow Semi Condensed", sans-serif; font-size: 1.05rem; font-weight: 600; margin: 0.9rem 0 0.2rem; }
 .person .skills { color: var(--muted); font-size: 0.95rem; }
+
+.chip { display: inline-flex; align-items: center; gap: .3em; padding: .1em .5em; margin: .1em 0;
+  border: 1px solid var(--rule, #ccc); border-radius: 999px; font-size: .85em; white-space: nowrap; }
+.chip .swatch { margin-right: 0; }
+.chips { line-height: 1.9; }
+#class-chips { margin: .6rem 0 .2rem; }
+.note { font-size: .9rem; color: var(--muted); margin-top: .3rem; }

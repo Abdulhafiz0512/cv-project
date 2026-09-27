@@ -37,9 +37,10 @@
       </p>
     </div>
     <figure class="hero-figure">
-      <img src="assets/scene_layout.jpg" alt="The camera view with the hand-measured layout: inbound and outbound carriageways, the stop line, three zebra crossings, the junction box and the bus bay." width="1600" height="900">
-      <figcaption>The camera view with our hand-measured layout: one-way carriageways (arrows), the inbound stop
-        line (red), zebras (white), junction box, bus bay and parking strip.</figcaption>
+      <img src="assets/scene_layout.jpg" alt="The camera view with the layout fitted to the road markings: inbound and outbound carriageways, the stop line, three zebra crossings, the junction box and the bus bay." width="1600" height="900">
+      <figcaption>The camera view with our layout, fitted to the paint and kerbs: one-way carriageways (arrows),
+        the inbound stop line (red), zebras (white), junction box, bus bay and parking strip. Each video is
+        registered to this view first, so the layout follows the camera's framing.</figcaption>
     </figure>
   </section>
 
@@ -53,9 +54,21 @@
 
   <section id="results" class="band">
     <h2>Results on the sample videos</h2>
-    <p>Each sample video annotated by our own renderer: boxes and track ids, the scene layout, active events in
-      the corner and the timeline under the picture. Click a segment on the timeline to jump to it.</p>
+    <p>All four sample videos, annotated by our own renderer: boxes and track ids, the scene layout warped to
+      each video's framing, and the road user an event fired on drawn thick in the event's colour. Click a
+      segment on the timeline, or a row of the table, to jump to it.</p>
+    <div class="table-scroll">
+      <table id="overview-table" class="events"><caption>All sample videos <span id="overview-total"></span></caption>
+        <thead><tr><th scope="col">Video</th><th scope="col">Length</th><th scope="col">Events</th>
+          <th scope="col">Events per class</th><th scope="col">Run time</th><th scope="col">Peak risk</th>
+          <th scope="col">Registered view</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="note">Run time is Part A plus Part B through the organizers' harness, as a multiple of the video's
+      length (the limit is 3×), on our RTX 2050 laptop with the reference settings.</p>
     <div id="video-tabs" class="tabs" role="tablist" aria-label="Sample videos"></div>
+    <div id="class-chips"></div>
     <div class="player">
       <video id="player" controls playsinline preload="metadata"></video>
       <p id="player-empty" class="empty" hidden></p>
@@ -168,6 +181,20 @@
       the near-miss rule used a NumPy call that raises an error on 2-D vectors in NumPy 2. Any video with a car
       braking hard would have crashed Part A and been scored as empty. We fixed it and now run every rule in
       isolation, so one broken rule cannot take the others down.</p>
+    <p><strong>The camera is not framed the same way twice.</strong> Once all four samples were in, the stop
+      line we had measured on the C3905 clip sat 25 px off on C3896, and C3902 is zoomed out further still. The
+      organizers call it the same camera and angle, but the framing moves between recordings, and the test videos
+      will move too. So we stopped treating the layout as fixed: we refitted it to the paint and kerbs of C3896
+      (the stop line, the zebras, the south zebra as the fan it really is, and an island that was 35 px off), and
+      every video is now registered to two reference backgrounds on its first frames and gets the layout warped
+      into its own view. On C3905 the warped stop line lands within a pixel of the paint.</p>
+    <p><strong>Watching our own renders found more false alarms than any test.</strong> With all four videos
+      annotated, we looked at every long or clustered event. Every red_light was a car in the lane by the median,
+      which moves on its own arrow while the other lanes wait, so red evidence now only counts within a phase
+      group. Most stop_line events were cars held past the line by a jammed junction. All five U-turns were cars
+      creeping in a queue or entering at the edge of the frame. Fixing those three cut the events on C3896 from
+      34 to 21, and the render now marks the exact road user each event is about, which is what made the review
+      possible.</p>
     <p><strong>A courier is not a car.</strong> The only failure_to_yield on our clip turned out to be a delivery
       rider moving slowly along a zebra with pedestrians. Two-wheelers now need riding speed to count, and a person
       moving faster than about 4 m/s is treated as a scooter rider, not a pedestrian.</p>
@@ -181,8 +208,10 @@
       it found 42% fewer pedestrians (15.1 vs 26.1 per frame), mostly the crowd at the far bus stop.</p>
 
     <h3>What did not</h3>
-    <p>We never built a labelled dev set, so we cannot give you an F1 score, and every threshold is our best
-      judgement rather than a tuned value. We do not predict illegal_turn or fire_smoke: we could not make them
+    <p>We still have no labelled dev set, so we cannot give you an F1 score, and every threshold is our best
+      judgement checked by eye on the renders rather than a tuned value. failure_to_yield fires often on C3902
+      and C3905; the cases we checked were a mix of drivers who really did not yield and borderline ones that only
+      labels can settle. We do not predict illegal_turn or fire_smoke: we could not make them
       reliable from this view, and the metric punishes predicting a class that never occurs. The accident and
       near-miss rules have never seen a real collision from this camera. And the line between "crossing next to
       the zebra" and "jaywalking" is still a judgement call.</p>
@@ -195,7 +224,7 @@
       ground-plane calibration from the zebra and lane markings would give us speeds in metres and a better risk
       score.</p>
     <h3>Measurements</h3>
-    <p>Ablations on the native 4K excerpt, measured on our CPU-only laptop with <code>tools/ablation.py</code>.
+    <p>Ablations on a 12-second native 4K clip of C3905, measured on our CPU-only laptop with <code>tools/ablation.py</code>.
       The submission uses the first row and the first decoder.</p>
     <div class="table-scroll">
       <table id="ablation-detectors" class="events"><caption>Detector and input size</caption>

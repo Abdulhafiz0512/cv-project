@@ -84,7 +84,7 @@ def _culprit(evidence: list, tid: int, t: float) -> str | None:
 
 
 def render(video: str, per, events: list, risk: list, out: str, fps: float = 10.0, progress=None,
-           evidence: list | None = None) -> None:
+           evidence: list | None = None, crf: int = 27) -> None:
     """Write an annotated H.264 review video; `per` is a pipeline.Perception.
 
     Road users are coloured by kind; one that an event rule fired on is drawn
@@ -99,7 +99,7 @@ def render(video: str, per, events: list, risk: list, out: str, fps: float = 10.
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     proc = subprocess.Popen(
         [ffmpeg, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{OUT_W}x{OUT_H + PANEL_H}",
-         "-r", str(fps), "-i", "pipe:0", "-c:v", "libx264", "-preset", "veryfast", "-crf", "27",
+         "-r", str(fps), "-i", "pipe:0", "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf),
          "-pix_fmt", "yuv420p", "-movflags", "+faststart", out], stdin=subprocess.PIPE)
     sx, sy = OUT_W / scene.CANON[0], OUT_H / scene.CANON[1]
     risk_t = np.asarray([r[0] for r in risk]) if risk else None

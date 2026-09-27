@@ -18,11 +18,13 @@ python -m venv .venv
 .venv/Scripts/python -m pytest -q                                # 24 tests must pass
 ```
 
-## Status (2026-09-27)
+## Status (2026-09-28)
 Done: package `src/trafficev`, tests, website live at https://abdulhafiz0512.github.io/cv-project/
 (GitHub Pages workflow deploys `web/` on push), portable demo (`demo/run_demo.bat|.sh`).
-Blocked earlier: the four Drive samples (C3896, C3897, C3902, C3905) hit Google's download quota;
-only a 12 s 4K excerpt of C3905 was processed. Thresholds are hand-set, not tuned on labels.
+All four samples (C3896, C3897, C3902, C3905) are processed: `predictions_samples.json` and the website
+(annotated renders, EDA, per-video stats) cover them. C3897 exists only as a 1280x720 copy (the processing
+resolution). Framing differs per recording: `view.py` registers each video to `src/trafficev/assets/ref_*.jpg`
+and warps the layout. Thresholds are hand-set and checked on the renders, not tuned on labels (next step 4).
 
 ## Remaining work, in order
 1. **Put the sample video(s) in `data/samples/`** (raw camera .MP4 is fine; `data/` is gitignored).
@@ -39,8 +41,6 @@ only a 12 s 4K excerpt of C3905 was processed. Thresholds are hand-set, not tune
    .venv\Scripts\python evaluate.py --pred predictions_samples.json --validate-only
    .venv\Scripts\python tools\build_site.py --videos data/samples --pred predictions_samples.json --out web
    ```
-   Then delete the excerpt's stale assets (`web/assets/eda/C3905_first12s`, `web/media/C3905_first12s.mp4`)
-   unless you keep that clip in `data/samples`.
 3. **Time it on this machine's GPU** (official settings, default time factor 3):
    `python run_submission.py --videos data/samples --out data/pred_timing.json` and report
    `part_a_sec`, `part_b_sec`, `total_sec` / duration from its log.

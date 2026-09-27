@@ -465,11 +465,15 @@ def _idx(k: Kin, times: np.ndarray) -> np.ndarray:
 
 
 def near_miss(ctx: Context) -> list[Interval]:
-    """Hard braking of a moving vehicle with another road user close ahead and no contact."""
+    """Hard braking of a moving vehicle with another road user close ahead and no contact.
+
+    The braking box must be inside the frame (a box shrinking at the edge reads as a
+    stop), and the road user ahead must be a pedestrian or moving: slowing down behind
+    a parked or queued car is ordinary driving."""
     users = [k for k in ctx.kins if k.kind in (*VEHICLES, "person")]
     out = []
     for k in ctx.of(*VEHICLES):
-        hard = (k.accel < -3.0) & (k.rel_speed > 0.5)
+        hard = (k.accel < -3.0) & (k.rel_speed > 0.5) & _clear(k)
         for i, j in runs(hard):
             v0 = k.rel_speed[max(0, i - 3)]
             if v0 < 2.0 or k.rel_speed[j] > 0.5 * v0:
@@ -479,6 +483,8 @@ def near_miss(ctx: Context) -> list[Interval]:
                 if o is k or not (o.t[0] <= k.t[i] <= o.t[-1]):
                     continue
                 oi = o.at(k.t[i])
+                if o.kind in VEHICLES and o.still()[oi]:
+                    continue
                 rel = o.foot[oi] - k.foot[i]
                 ahead = float(np.dot(rel, h))
                 side = abs(float(h[0] * rel[1] - h[1] * rel[0]))

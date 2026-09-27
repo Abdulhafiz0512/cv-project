@@ -2,16 +2,16 @@
 
 const CLASS_INFO = {
   accident: ["#e5484d", "Two road users' footprints meet, then both stop abruptly and stay put for 3 s, outside the signal queue."],
-  near_miss: ["#f76b15", "A vehicle brakes hard (over 3 box heights/s²) with a road user close ahead, and they never touch."],
-  red_light: ["#ff8fa3", "A vehicle crosses the inbound stop line while another vehicle is waiting at it before and after the crossing."],
+  near_miss: ["#f76b15", "A vehicle brakes hard (over 3 box heights/s²) with a pedestrian or a moving vehicle close ahead, and they never touch. Slowing behind a parked car does not count."],
+  red_light: ["#ff8fa3", "A vehicle crosses the inbound stop line while another vehicle of its phase group waits at it before and after the crossing. The lane by the median moves on its own arrow, so it is its own group."],
   wrong_way: ["#d864d8", "Moving against the one-way direction of the divided carriageway for 1.5 s and 2.5 box heights."],
-  illegal_u_turn: ["#a78bfa", "The heading turns by 150° or more on the carriageway, with no identity jump in the track."],
+  illegal_u_turn: ["#a78bfa", "The heading turns by 150° or more on the carriageway within 12 s, measured only while the vehicle clearly moves and its box is inside the frame, with no identity jump."],
   stopped_vehicle: ["#f5d90a", "Stationary 10 s or more on a road link: not in the signal queue, the junction, a zebra approach, parking or the bus bay, and not queued behind another car."],
   jaywalking: ["#4cc38a", "A person on foot (slower than an e-scooter) at least half a body height inside the carriageway and away from every zebra for 1.2 s."],
-  failure_to_yield: ["#3ecfe0", "A vehicle, or a ridden two-wheeler, drives through a zebra while a pedestrian on the same zebra is within three vehicle heights."],
+  failure_to_yield: ["#3ecfe0", "A vehicle, or a ridden two-wheeler, with its box inside the frame, drives through a zebra while a pedestrian on the same zebra is within three vehicle heights."],
   illegal_turn: ["#8da4ef", null],
   solid_line_crossing: ["#f0f0f0", "The ground point crosses the solid line along the median."],
-  stop_line: ["#ffb224", "A vehicle stands still for 3 s past the stop line, between it and the far edge of the zebra."],
+  stop_line: ["#ffb224", "A vehicle stands still for 3 s past the stop line, before the far edge of the zebra, while its lanes have red and nothing stationary holds it from ahead."],
   congestion: ["#b08a5a", "Six or more vehicles in a one-way carriageway, 80% of them crawling, for longer than a signal cycle."],
   road_obstacle: ["#9ba1a6", "An animal on the carriageway for 2 s."],
   fire_smoke: ["#ff5a1f", null],
@@ -90,6 +90,34 @@ function tabs(container, items, onSelect) {
   if (items.length) select(0);
 }
 
+/* ---------------------------------------------------------------- overview */
+function renderOverview(videos) {
+  const body = $("#overview-table tbody");
+  if (!body) return;
+  body.innerHTML = "";
+  for (const v of videos) {
+    const s = v.summary || {};
+    const rt = s.runtime_x != null ? `${s.runtime_x}×` : "–";
+    const vw = v.view && v.view.reference ? `${v.view.reference} (${v.view.inliers} matches, zoom ${v.view.zoom})` : "base layout";
+    const top = Object.entries(s.per_class || {}).map(([c, n]) =>
+      `<span class="chip"><span class="swatch" style="background:${(CLASS_INFO[c] || ["#999"])[0]}"></span>${c} ${n}</span>`).join(" ");
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${v.stem}</td><td>${fmt(v.meta.duration_s || 0)}</td><td>${s.events ?? v.events.length}</td>` +
+      `<td class="chips">${top || "–"}</td><td>${rt}</td><td>${s.max_risk ?? "–"}</td><td>${vw}</td>`;
+    body.appendChild(tr);
+  }
+  const tot = videos.reduce((a, v) => a + (v.summary ? v.summary.events : v.events.length), 0);
+  const dur = videos.reduce((a, v) => a + (v.meta.duration_s || 0), 0);
+  $("#overview-total").textContent = `${videos.length} videos, ${fmt(dur)} of footage, ${tot} events.`;
+}
+
+function classChips(events) {
+  const counts = {};
+  for (const [, , l] of events) counts[l] = (counts[l] || 0) + 1;
+  $("#class-chips").innerHTML = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([c, n]) =>
+    `<span class="chip"><span class="swatch" style="background:${(CLASS_INFO[c] || ["#999"])[0]}"></span>${c} ${n}</span>`).join(" ");
+}
+
 /* ---------------------------------------------------------------- results */
 let playheads = [];
 function renderResults(site) {
@@ -101,6 +129,7 @@ function renderResults(site) {
     player.hidden = true;
     return;
   }
+  renderOverview(videos);
   player.addEventListener("timeupdate", () => playheads.forEach((fn) => fn(player.currentTime)));
   tabs($("#video-tabs"), videos.map((v) => v.stem), (i) => {
     const v = videos[i];
@@ -118,6 +147,7 @@ function renderResults(site) {
     playheads = [drawTimeline($("#timeline"), v.events, duration, site.classes, seek),
                  drawRisk($("#riskline"), v.risk, duration)];
     fillEvents(v.events, seek);
+    classChips(v.events);
   });
 }
 
