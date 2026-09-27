@@ -18,6 +18,13 @@ from .kinematics import Kin, runs
 
 MIN_WAIT_S = 2.0        # a stop this long at the line is a red phase, not hesitation
 REACTION_S = 1.0        # leader moves ~1 s after green
+# The inbound approach has five lanes in two phase groups: the lane by the median
+# moves on its own arrow while the other four wait (C3896: all 20 of its stop-line
+# crossings happened with vehicles waiting in the other lanes, which never cross
+# while anyone waits). Red evidence therefore only counts within a phase group.
+# Lanes are addressed by their fraction of the way from the kerb (0) to the median
+# (1) end of the stop line; lane centres sit at 0.07 0.27 0.46 0.67 0.87.
+MEDIAN_LANE_FROM = 0.77
 
 
 @dataclass
@@ -57,8 +64,25 @@ def distance_upstream(foot: np.ndarray) -> np.ndarray:
     return (np.atleast_2d(foot) - a) @ n
 
 
-def red_intervals(kins: list[Kin]) -> list[tuple[float, float, int]]:
-    """(start, end, tid) spans in which an inbound vehicle waited at the stop line."""
+def lane_fraction(foot: np.ndarray) -> np.ndarray:
+    """Position across the inbound lanes: 0 at the kerb end of the stop line, 1 at the median end.
+    Measured across the traffic direction, so it stays constant along a lane."""
+    d = scene.INBOUND.direction
+    nrm = np.array([-d[1], d[0]])
+    span = float((scene.STOP_LINE[-1] - scene.STOP_LINE[0]) @ nrm)
+    return (np.atleast_2d(foot) - scene.STOP_LINE[0]) @ nrm / span
+
+
+def phase_group(foot: np.ndarray) -> np.ndarray:
+    """1 for the median (arrow) lane, 0 for the other inbound lanes."""
+    return (lane_fraction(foot) >= MEDIAN_LANE_FROM).astype(int)
+
+
+Red = tuple[float, float, int, int]   # start, end, waiting tid, its phase group
+
+
+def red_intervals(kins: list[Kin]) -> list[Red]:
+    """Spans in which an inbound vehicle waited at the stop line, with its phase group."""
     out = []
     for k in kins:
         if k.kind not in ("vehicle", "two_wheeler"):
@@ -66,11 +90,14 @@ def red_intervals(kins: list[Kin]) -> list[tuple[float, float, int]]:
         up = distance_upstream(k.foot)
         near_line = ((up > -0.3 * k.scale) & (up < 2.2 * k.scale)
                      & scene.points_in_poly(k.foot, scene.QUEUE_ZONE) & ~scene.points_in_poly(k.foot, scene.PARKING))
+        group = phase_group(k.foot)
         for i, j in runs(k.still() & near_line):
             if k.t[j] - k.t[i] >= MIN_WAIT_S:
-                out.append((float(k.t[i]), float(k.t[j]) - REACTION_S, k.tid))
+                g = int(np.round(np.median(group[i:j + 1])))
+                out.append((float(k.t[i]), float(k.t[j]) - REACTION_S, k.tid, g))
     return out
 
 
-def is_red(t: float, reds: list[tuple[float, float, int]], exclude_tid: int | None = None) -> bool:
-    return any(s <= t <= e and tid != exclude_tid for s, e, tid in reds)
+def is_red(t: float, reds: list[Red], exclude_tid: int | None = None, group: int | None = None) -> bool:
+    """A vehicle (of the given phase group, if set) waited at the line at time t."""
+    return any(s <= t <= e and tid != exclude_tid and (group is None or g == group) for s, e, tid, g in reds)

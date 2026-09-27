@@ -8,8 +8,12 @@ The view is a T-junction seen from an elevated position looking north-west:
 - east leg: the main road continues to the right edge, with the east zebra;
 - south leg: a side road under the camera with three channelising islands
   and a long diagonal zebra.
-Traffic keeps right. Polygons are measured on a 4K frame in normalised
-coordinates and stored in a canonical 1920x1080 space (see tracking.py).
+Traffic keeps right. Polygons are measured on the C3896 4K frame (the base
+view) in normalised coordinates and stored in a canonical 1920x1080 space
+(see tracking.py). Recordings are framed slightly differently, so every video
+is registered to the base view and ``set_view`` warps this layout into it
+(see view.py). Vertices on the image border sit just outside it (-0.02 /
+1.02) so a warp cannot pull a road edge into the picture.
 """
 from __future__ import annotations
 
@@ -38,56 +42,124 @@ class Zone:
 
 # Drivable surface: outer boundary; holes (median, islands) are removed below.
 ROAD_OUTER = _poly(
-    (0.000, 0.100), (0.060, 0.090), (0.330, 0.125), (0.460, 0.180), (0.620, 0.250), (0.660, 0.280),
-    (0.700, 0.320), (0.740, 0.370), (0.790, 0.420), (0.850, 0.440), (0.935, 0.445), (0.965, 0.462),
-    (1.000, 0.470), (1.000, 1.000), (0.000, 1.000),
-    (0.000, 0.780), (0.100, 0.700), (0.170, 0.635), (0.190, 0.600), (0.150, 0.520), (0.100, 0.400),
-    (0.050, 0.250), (0.020, 0.160), (0.000, 0.140),
+    (-0.020, 0.077), (0.0661, 0.0696), (0.3326, 0.1146), (0.4604, 0.1739), (0.6177, 0.2491), (0.6569, 0.2802),
+    (0.6960, 0.3212), (0.7350, 0.3721), (0.7838, 0.4233), (0.8428, 0.4453), (0.9266, 0.4535), (0.9560, 0.4714),
+    (1.020, 0.4806), (1.020, 1.020), (-0.020, 1.020),
+    (-0.020, 0.7487), (0.1000, 0.6735), (0.1698, 0.6119), (0.1899, 0.5781), (0.1511, 0.4976), (0.1028, 0.3772),
+    (0.0548, 0.2272), (0.0259, 0.1372), (-0.020, 0.1167),
 )
-MEDIAN = _poly((0.050, 0.112), (0.625, 0.462), (0.625, 0.495), (0.595, 0.495), (0.050, 0.138))
+MEDIAN = _poly((0.0560, 0.0909), (0.6207, 0.4585), (0.6204, 0.4910), (0.5908, 0.4899), (0.0558, 0.1166))
+_SE_ISLAND_TIP = (0.4990, 0.8111)
 ISLANDS = [
     MEDIAN,
-    _poly((0.620, 0.505), (0.690, 0.505), (0.690, 0.535), (0.620, 0.535)),              # keep-right sign
-    _poly((0.065, 0.880), (0.165, 0.800), (0.215, 0.860), (0.200, 0.885)),              # south-west
-    _poly((0.265, 0.725), (0.330, 0.640), (0.395, 0.700), (0.380, 0.715)),              # south, top
-    _poly((0.360, 0.840), (0.440, 0.790), (0.485, 0.790), (0.500, 0.845), (0.400, 0.860)),  # south-east
+    _poly((0.6154, 0.5007), (0.6844, 0.5033), (0.6842, 0.5329), (0.6151, 0.5303)),                    # keep-right sign
+    _poly((0.0637, 0.8500), (0.1633, 0.7747), (0.2122, 0.8358), (0.1971, 0.8600)),                    # south-west
+    _poly((0.2628, 0.7044), (0.3278, 0.6229), (0.3915, 0.6846), (0.3765, 0.6989)),                    # south, top
+    _poly((0.3555, 0.7778), (0.4375, 0.7519), (0.4583, 0.7519), _SE_ISLAND_TIP, (0.4922, 0.8222),
+          (0.3604, 0.8306)),                                                                          # south-east
 ]
 
+# Zebras fitted to the stripe ends on a median background of C3896. The south
+# zebra is fan-shaped (stripes lengthen towards the camera), hence its outline.
+_CW_W_NEAR_R, _CW_W_NEAR_L = (0.6016, 0.5131), (0.1773, 0.6056)
+_CW_E_NEAR_R = (0.9349, 0.4681)
 CROSSWALKS = {
-    "west": _poly((0.170, 0.585), (0.600, 0.495), (0.625, 0.530), (0.190, 0.640)),
-    "east": _poly((0.640, 0.485), (0.905, 0.435), (0.935, 0.465), (0.665, 0.525)),
-    "south": _poly((0.090, 0.720), (0.175, 0.700), (0.470, 1.000), (0.330, 1.000)),
+    "west": _poly((0.1749, 0.5611), (0.6000, 0.4811), _CW_W_NEAR_R, _CW_W_NEAR_L),
+    "east": _poly((0.6198, 0.4731), (0.9323, 0.4454), _CW_E_NEAR_R, (0.6198, 0.4998)),
+    "south": _poly(
+        (0.0911, 0.7009), (0.1719, 0.6593), (0.2135, 0.6963), (0.2526, 0.7343), (0.3333, 0.8009),
+        (0.3750, 0.8407), (0.4062, 0.8796), (0.4349, 0.9333), (0.4635, 0.9926), (0.4714, 1.0185),
+        (0.3240, 1.0185), (0.3187, 0.9861), (0.3021, 0.9444), (0.2839, 0.9000), (0.2682, 0.8630),
+        (0.2302, 0.8287), (0.1849, 0.7917), (0.1458, 0.7546), (0.1094, 0.7222)),
 }
+
+# Stop line of the inbound approach, fitted to the paint; vehicles cross it along INBOUND.direction.
+_SL_L, _SL_R = (0.1484, 0.4862), (0.4833, 0.4237)
+STOP_LINE = _poly(_SL_L, _SL_R)
 
 # One-way carriageways of the divided west leg (wrong-way reference).
 INBOUND = Zone("near_inbound", _poly(
-    (0.000, 0.135), (0.050, 0.140), (0.500, 0.428), (0.485, 0.445), (0.150, 0.515), (0.100, 0.400),
-    (0.050, 0.250), (0.020, 0.160)), _unit(0.575, 0.355))
+    (-0.020, 0.1117), (0.0558, 0.1186), (0.4976, 0.4201), _SL_R, _SL_L, (0.1028, 0.3772),
+    (0.0548, 0.2272), (0.0259, 0.1372)), _unit(0.0242, 0.0159))
 OUTBOUND = Zone("far_outbound", _poly(
-    (0.000, 0.100), (0.060, 0.090), (0.330, 0.125), (0.460, 0.180), (0.620, 0.250), (0.660, 0.280),
-    (0.700, 0.300), (0.625, 0.462), (0.050, 0.112)), _unit(-0.575, -0.355))
+    (-0.020, 0.0772), (0.0661, 0.0696), (0.3326, 0.1146), (0.4604, 0.1739), (0.6177, 0.2491), (0.6569, 0.2802),
+    (0.6962, 0.3015), (0.6207, 0.4585), (0.0560, 0.0909)), _unit(-0.0242, -0.0159))
 ONE_WAY = [INBOUND, OUTBOUND]
 
-# Stop line of the inbound approach; vehicles cross it moving along INBOUND.direction.
-STOP_LINE = _poly((0.150, 0.515), (0.485, 0.445))
 # Where inbound vehicles wait for the signal (a queue here is not "stopped_vehicle").
-QUEUE_ZONE = _poly((0.080, 0.330), (0.300, 0.300), (0.500, 0.428), (0.485, 0.445), (0.150, 0.515))
+QUEUE_ZONE = _poly((0.0837, 0.3073), (0.3013, 0.2862), (0.4976, 0.4201), _SL_R, _SL_L)
 # Between the stop line and the far edge of the west zebra: stopping here on red is "stop_line".
-STOP_BOX = _poly((0.150, 0.515), (0.485, 0.445), (0.610, 0.510), (0.190, 0.640))
+STOP_BOX = _poly(_SL_L, _SL_R, _CW_W_NEAR_R, _CW_W_NEAR_L)
 # Junction box between the stop line / zebras.
-JUNCTION = _poly((0.150, 0.515), (0.485, 0.445), (0.625, 0.462), (0.935, 0.465), (1.000, 0.520),
-                 (1.000, 0.700), (0.500, 0.845), (0.190, 0.640))
-BUS_BAY = _poly((0.300, 0.110), (0.500, 0.165), (0.500, 0.230), (0.300, 0.172))
-PARKING = _poly((0.000, 0.300), (0.100, 0.330), (0.185, 0.440), (0.185, 0.520), (0.000, 0.540))
+JUNCTION = _poly(_SL_L, _SL_R, (0.6207, 0.4585), _CW_E_NEAR_R, (1.020, 0.5299),
+                 (1.020, 0.7074), _SE_ISLAND_TIP, _CW_W_NEAR_L)
+BUS_BAY = _poly((0.3031, 0.0986), (0.5000, 0.1606), (0.4994, 0.2248), (0.3025, 0.1598))
+PARKING = _poly((-0.020, 0.2746), (0.1034, 0.3081), (0.1864, 0.4200), (0.1857, 0.4990), (-0.020, 0.5117))
 # Solid markings: the yellow edge line along the median (crossing it = entering the median / oncoming side).
 SOLID_LINES = [
-    _poly((0.050, 0.142), (0.300, 0.300), (0.590, 0.488)),
+    _poly((0.0558, 0.1206), (0.3013, 0.2862), (0.5859, 0.4828)),
 ]
 # Signal heads visible from the camera (lamp ROI boxes x0 y0 x1 y1), used for phase estimation.
 SIGNAL_HEADS = {
-    "pole_west": _poly((0.130, 0.465), (0.145, 0.505)),
-    "median_nose": _poly((0.588, 0.325), (0.612, 0.395)),
+    "pole_west": _poly((0.1315, 0.4425), (0.1467, 0.4826)),
+    "median_nose": _poly((0.5848, 0.3219), (0.6091, 0.3919)),
 }
+
+# Bump when any geometry above changes: it keys the perception cache.
+LAYOUT_VERSION = "c3896-base-1"
+
+
+# --------------------------------------------------------------------------- per-video view
+
+def _warp(pts: np.ndarray, H: np.ndarray) -> np.ndarray:
+    hom = np.hstack([pts, np.ones((len(pts), 1))]) @ H.T
+    return hom[:, :2] / hom[:, 2:3]
+
+
+def _warp_zone(z: Zone, H: np.ndarray) -> Zone:
+    c = z.poly.mean(axis=0)
+    a, b = _warp(np.array([c, c + 20.0 * z.direction]), H)
+    return Zone(z.name, _warp(z.poly, H), (b - a) / np.linalg.norm(b - a))
+
+
+def _warp_box(box: np.ndarray, H: np.ndarray) -> np.ndarray:
+    (x0, y0), (x1, y1) = box
+    c = _warp(np.array([[x0, y0], [x1, y0], [x0, y1], [x1, y1]]), H)
+    return np.array([c.min(axis=0), c.max(axis=0)])
+
+
+_BASE = dict(
+    ROAD_OUTER=ROAD_OUTER, ISLANDS=ISLANDS, CROSSWALKS=CROSSWALKS, STOP_LINE=STOP_LINE, INBOUND=INBOUND,
+    OUTBOUND=OUTBOUND, QUEUE_ZONE=QUEUE_ZONE, STOP_BOX=STOP_BOX, JUNCTION=JUNCTION, BUS_BAY=BUS_BAY,
+    PARKING=PARKING, SOLID_LINES=SOLID_LINES, SIGNAL_HEADS=SIGNAL_HEADS,
+)
+VIEW_H = np.eye(3)   # base layout -> current video, canonical px
+
+
+def set_view(H: np.ndarray | None) -> None:
+    """Warp the base layout into a video's view (None or identity = base view)."""
+    global ROAD_OUTER, MEDIAN, ISLANDS, CROSSWALKS, STOP_LINE, INBOUND, OUTBOUND, ONE_WAY
+    global QUEUE_ZONE, STOP_BOX, JUNCTION, BUS_BAY, PARKING, SOLID_LINES, SIGNAL_HEADS, VIEW_H
+    H = np.eye(3) if H is None else np.asarray(H, dtype=np.float64)
+    if np.allclose(H, VIEW_H):
+        return
+    b = _BASE
+    ROAD_OUTER = _warp(b["ROAD_OUTER"], H)
+    ISLANDS = [_warp(p, H) for p in b["ISLANDS"]]
+    MEDIAN = ISLANDS[0]
+    CROSSWALKS = {k: _warp(p, H) for k, p in b["CROSSWALKS"].items()}
+    STOP_LINE = _warp(b["STOP_LINE"], H)
+    INBOUND, OUTBOUND = _warp_zone(b["INBOUND"], H), _warp_zone(b["OUTBOUND"], H)
+    ONE_WAY = [INBOUND, OUTBOUND]
+    QUEUE_ZONE, STOP_BOX, JUNCTION = _warp(b["QUEUE_ZONE"], H), _warp(b["STOP_BOX"], H), _warp(b["JUNCTION"], H)
+    BUS_BAY, PARKING = _warp(b["BUS_BAY"], H), _warp(b["PARKING"], H)
+    SOLID_LINES = [_warp(p, H) for p in b["SOLID_LINES"]]
+    SIGNAL_HEADS = {k: _warp_box(p, H) for k, p in b["SIGNAL_HEADS"].items()}
+    VIEW_H = H.copy()
+
+
+def reset_view() -> None:
+    set_view(None)
 
 
 def points_in_poly(pts: np.ndarray, poly: np.ndarray) -> np.ndarray:

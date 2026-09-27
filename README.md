@@ -47,14 +47,23 @@ hand-written. With no labels for this camera, rules we can read and test beat a 
 validate.
 
 **Scene layout** (`src/trafficev/scene.py`, the equivalent of `camera.md`, which we did not receive).
-Measured on a 4K frame and stored in a canonical 1920×1080 space:
+Fitted to the paint and kerbs of a 4K frame of `C3896` (the base view: stop line and zebras fitted to the
+markings on a median background, south zebra traced as the fan it is) and stored in a canonical 1920×1080
+space:
 - the west leg is a divided road: the near carriageway is **inbound** (towards the camera) and ends at a
   stop line and the west zebra; the far carriageway is **outbound** and has a bus bay;
 - the east leg has the east zebra, and the south leg (under the camera) has three islands and a long
   diagonal zebra;
 - traffic keeps right; the inbound signal heads face away from the camera.
 
-`python tools/draw_scene.py --frame <frame.jpg> --out layout.jpg` draws it.
+**Per-video view registration** (`src/trafficev/view.py`). The recordings share the camera but not the
+framing: `C3905` and `C3902` are zoomed out and panned against `C3896`, which moves the stop line by 25 px
+or more. Each video's first frames are matched to two reference backgrounds (day `C3896`, dusk `C3905`, in
+`src/trafficev/assets/`) with SIFT + MAGSAC, and the base layout is warped into that video's pixels
+(≈0.25 s per video; within 1 px of the paint on `C3905`). A frame that cannot be matched keeps the base
+layout. Part B registers from the frames it has already seen, so it stays causal.
+
+`python tools/draw_scene.py --frame <frame.jpg> --out layout.jpg [--register]` draws it.
 
 **Why the details matter:**
 - **Decode is the real cost.** The camera writes H.264 4:2:2 10-bit at about 147 Mbit/s with an IBBP
@@ -65,7 +74,9 @@ Measured on a 4K frame and stored in a canonical 1920×1080 space:
   the scale change across this elevated view, so one "stationary" threshold (0.12 bh/s) works
   everywhere.
 - **Signal phase from behaviour.** A vehicle waiting at the inbound stop line for 2 s means red.
-  `red_light` requires another vehicle waiting both before and after the crossing.
+  `red_light` requires another vehicle waiting both before and after the crossing. The inbound approach
+  has two phase groups: the lane by the median moves on its own arrow (in `C3896` all 20 of its crossings
+  happened while the other lanes waited), so red evidence only counts within the crossing car's group.
 - **Segment shaping.** A strict core condition must hold for a minimum time (for example, a pedestrian
   at least half a body height inside the carriageway for 1.2 s). The reported segment is the looser run
   around it, which matches the annotation conventions (steps onto / leaves the road). Same-class
@@ -78,14 +89,14 @@ Measured on a 4K frame and stored in a canonical 1920×1080 space:
 |---|---|
 | accident | footprints meet, then both road users stop abruptly (> 2.5 bh/s lost within 1 s) and stay still 3 s, outside the signal queue |
 | near_miss | hard braking (< −3 bh/s²) with a road user close ahead and no contact afterwards |
-| red_light | crossing the inbound stop line while another vehicle waits at it before and after |
+| red_light | crossing the inbound stop line while another vehicle of the same phase group waits at it before and after |
 | wrong_way | against the one-way direction for ≥ 1.5 s and ≥ 2.5 box heights |
-| illegal_u_turn | heading change ≥ 150° on the carriageway, no identity jump |
+| illegal_u_turn | heading change ≥ 150° on the carriageway, measured only while moving > 0.8 bh/s and clear of the frame border, completed within 12 s, no identity jump |
 | stopped_vehicle | still ≥ 10 s on a road link; not in queue / junction / zebra approach / parking / bus bay; not queued behind another vehicle; fragments at the same spot pooled |
 | jaywalking | pedestrian ≥ 0.45 body heights inside the carriageway and ≥ 0.6 body heights from every zebra for ≥ 1.2 s |
-| failure_to_yield | vehicle (or ridden two-wheeler, not a pushed bike) drives through a zebra while a pedestrian on that zebra is within 3 vehicle heights |
+| failure_to_yield | vehicle (or ridden two-wheeler, not a pushed bike), with its box clear of the frame border, drives through a zebra while a pedestrian on that zebra is within 3 vehicle heights |
 | solid_line_crossing | ground point crosses the solid line along the median |
-| stop_line | still ≥ 3 s past the stop line, before the far edge of the zebra |
+| stop_line | still ≥ 3 s past the stop line, before the far edge of the zebra, while its phase group is red and no stationary vehicle holds it from ahead (spill-back) |
 | congestion | ≥ 6 vehicles in a one-way carriageway, ≥ 80 % crawling, longer than a signal cycle |
 | road_obstacle | animal on the carriageway ≥ 2 s |
 | illegal_turn, fire_smoke | not emitted (not reliable from this view) |
@@ -168,11 +179,11 @@ tests/                 geometry and rule tests on synthetic trajectories, end-to
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest                                        # 17 tests, ~20 s on CPU
+python -m pytest                                        # 24 tests, ~30 s on CPU
 python scripts/fetch_samples.py --out data/samples      # sample videos -> 1080p
 export TRAFFICEV_CACHE=data/cache                       # perception cache for fast rule iteration
 python tools/dev_eval.py --videos data/samples --gt labels/dev_labels.json
-python tools/render.py --video data/samples/C3905.mp4 --pred predictions_samples.json --out review.mp4
+python tools/render.py --video data/samples/C3896.mp4 --pred predictions_samples.json --out review.mp4  # culprit road users drawn in their event's colour
 ```
 
 ## Website and demo
@@ -204,8 +215,11 @@ python tools/render.py --video data/samples/C3905.mp4 --pred predictions_samples
 
 ## Known limitations
 
-- The organizers' Drive links hit Google's download quota while we worked. Our checks used a 12 s 4K
-  excerpt of `C3905` and synthetic trajectories, not a labelled dev set, so thresholds are hand-set.
+- No labelled dev set yet: thresholds are hand-set and checked by watching the review renders of
+  `C3896`, `C3902` and `C3905` (false positives found that way were fixed: median-lane arrows read as red,
+  spill-back read as stop-line violations, creeping queues and frame-edge boxes read as U-turns).
+- `failure_to_yield` fires often on `C3902`/`C3905`; the ones checked were a mix of real non-yielding and
+  borderline cases, which only labels can settle.
 - Accident and near-miss rules have not seen a real positive from this camera.
 - `camera.md` was not available to us; the layout was measured from the video.
 

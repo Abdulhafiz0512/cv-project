@@ -77,8 +77,21 @@ def _panel(duration: float, events: list, risk: list, t: float) -> np.ndarray:
     return panel
 
 
-def render(video: str, per, events: list, risk: list, out: str, fps: float = 10.0, progress=None) -> None:
-    """Write an annotated H.264 review video; `per` is a pipeline.Perception."""
+def _culprit(evidence: list, tid: int, t: float) -> str | None:
+    """The event a road user is currently blamed for (the most specific, i.e. shortest, one)."""
+    hits = [(e - s, lab) for lab, k, s, e in evidence if k == tid and s - 0.3 <= t <= e + 0.3]
+    return min(hits)[1] if hits else None
+
+
+def render(video: str, per, events: list, risk: list, out: str, fps: float = 10.0, progress=None,
+           evidence: list | None = None) -> None:
+    """Write an annotated H.264 review video; `per` is a pipeline.Perception.
+
+    Road users are coloured by kind; one that an event rule fired on is drawn
+    thick in that event's colour with the event name, while the event is active.
+    """
+    if evidence is None:
+        evidence = pipeline.explain(per)[1]
     by_t = _rows_by_time(per)
     duration = per.info.duration
     trails: dict[int, list] = {}
@@ -90,6 +103,7 @@ def render(video: str, per, events: list, risk: list, out: str, fps: float = 10.
          "-pix_fmt", "yuv420p", "-movflags", "+faststart", out], stdin=subprocess.PIPE)
     sx, sy = OUT_W / scene.CANON[0], OUT_H / scene.CANON[1]
     risk_t = np.asarray([r[0] for r in risk]) if risk else None
+    last, tick = None, 0.0
     for t, frame in sample_frames(video, fps):
         img = cv2.resize(frame, (OUT_W, OUT_H), interpolation=cv2.INTER_AREA)
         img = cv2.convertScaleAbs(img, alpha=1.25, beta=8)
@@ -98,8 +112,17 @@ def render(video: str, per, events: list, risk: list, out: str, fps: float = 10.
             kind = COCO_KIND.get(int(cls), "other")
             c = KIND_COLORS.get(kind, (200, 200, 200))
             p1, p2 = (int(x1 * sx), int(y1 * sy)), (int(x2 * sx), int(y2 * sy))
-            cv2.rectangle(img, p1, p2, c, 2)
-            cv2.putText(img, str(tid), (p1[0], p1[1] - 3), cv2.FONT_HERSHEY_SIMPLEX, 0.45, c, 1, cv2.LINE_AA)
+            blamed = _culprit(evidence, int(tid), t)
+            if blamed:
+                c = CLASS_COLORS.get(blamed, (255, 255, 255))
+                cv2.rectangle(img, p1, p2, c, 4)
+                label = f"{tid} {blamed}"
+                (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                cv2.rectangle(img, (p1[0], p1[1] - th - 8), (p1[0] + tw + 6, p1[1]), c, -1)
+                cv2.putText(img, label, (p1[0] + 3, p1[1] - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
+            else:
+                cv2.rectangle(img, p1, p2, c, 1)
+                cv2.putText(img, str(tid), (p1[0], p1[1] - 3), cv2.FONT_HERSHEY_SIMPLEX, 0.45, c, 1, cv2.LINE_AA)
             trail = trails.setdefault(tid, [])
             trail.append((t, int((x1 + x2) / 2 * sx), int(y2 * sy)))
             while trail and t - trail[0][0] > 3.0:
@@ -115,9 +138,18 @@ def render(video: str, per, events: list, risk: list, out: str, fps: float = 10.
             col = (0, 0, 255) if r >= 0.5 else (200, 200, 200)
             cv2.putText(img, f"risk {r:.2f}", (OUT_W - 150, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, col, 2, cv2.LINE_AA)
         cv2.putText(img, f"{t:6.1f}s", (OUT_W - 150, OUT_H - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2, cv2.LINE_AA)
-        proc.stdin.write(np.vstack([img, _panel(duration, events, risk, t)]).tobytes())
+        # sampled frames are not evenly spaced (I/P frames only): hold each one on a
+        # fixed output clock so the review video plays in real time
+        out_frame = np.vstack([img, _panel(duration, events, risk, t)]).tobytes()
+        while last is not None and tick < t:
+            proc.stdin.write(last)
+            tick += 1.0 / fps
+        last = out_frame
         if progress is not None:
             progress(t / max(duration, 1e-6))
+    while last is not None and tick < duration:
+        proc.stdin.write(last)
+        tick += 1.0 / fps
     proc.stdin.close()
     proc.wait()
 

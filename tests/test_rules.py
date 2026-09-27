@@ -1,5 +1,5 @@
 """Rule tests on synthetic trajectories placed in the real scene layout."""
-from helpers import context, events, make_track, norm
+from helpers import context, events, make_track, norm, scene
 
 
 def labels(evts):
@@ -40,14 +40,34 @@ def test_queue_is_not_a_stopped_vehicle():
     assert events.stopped_vehicle(context([a, b], 20.0)) == []
 
 
+def _lane_point(frac: float, upstream_px: float):
+    """A point in the inbound lane at `frac` (0 kerb .. 1 median), `upstream_px` before the stop line."""
+    a, b = scene.STOP_LINE[0], scene.STOP_LINE[-1]
+    return a + frac * (b - a) - upstream_px * scene.INBOUND.direction
+
+
+def _crossing(tid: int, frac: float, t0: float):
+    """A car driving through the stop line in lane `frac`, crossing it at t0 + 4 s."""
+    d = scene.INBOUND.direction
+    return make_track(tid, 2, t0, [(t0, _lane_point(frac, 320.0)), (t0 + 4.0, _lane_point(frac, 0.0)),
+                                   (t0 + 6.0, _lane_point(frac, 0.0) + 160.0 * d)])
+
+
 def test_red_light_runner_passes_a_waiting_car():
-    waiting = make_track(1, 2, 0.0, [(0.0, norm(0.40, 0.44)), (20.0, norm(0.40, 0.44))])   # at the line
-    runner = make_track(2, 2, 5.0, [(5.0, norm(0.10, 0.36)), (9.0, norm(0.45, 0.62)), (11.0, norm(0.65, 0.70))])
+    waiting = make_track(1, 2, 0.0, [(0.0, _lane_point(0.46, 25.0)), (20.0, _lane_point(0.46, 25.0))])
+    runner = _crossing(2, 0.27, 5.0)                     # the next lane over, same phase group
     ev = events.red_light(context([waiting, runner], 20.0))
     assert len(ev) == 1
-    assert 6.0 < ev[0][0] < 9.0
+    assert 8.0 < ev[0][0] < 10.0
     # the same crossing with nobody waiting is a green phase
     assert events.red_light(context([runner], 20.0)) == []
+
+
+def test_median_lane_arrow_is_not_red_light():
+    # C3896: the median lane moves on its own arrow while the other lanes wait
+    waiting = make_track(1, 2, 0.0, [(0.0, _lane_point(0.46, 25.0)), (20.0, _lane_point(0.46, 25.0))])
+    turner = _crossing(2, 0.87, 5.0)
+    assert events.red_light(context([waiting, turner], 20.0)) == []
 
 
 def test_u_turn_in_junction():

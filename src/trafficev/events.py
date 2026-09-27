@@ -30,10 +30,17 @@ VEHICLES = ("vehicle", "two_wheeler")
 class Context:
     kins: list[Kin]
     duration: float
-    reds: list[tuple[float, float, int]] = field(default_factory=list)
+    reds: list[signals.Red] = field(default_factory=list)
+    # (label, track id, start, end) of every road user a rule fired on: for review
+    # renders and error analysis only, never part of the output.
+    evidence: list[tuple[str, int, float, float]] = field(default_factory=list)
+    label: str = ""
 
     def of(self, *kinds: str) -> list[Kin]:
         return [k for k in self.kins if k.kind in kinds]
+
+    def blame(self, k: Kin, s: float, e: float) -> None:
+        self.evidence.append((self.label, int(k.tid), float(s), float(e)))
 
 
 # --------------------------------------------------------------------------- helpers
@@ -46,6 +53,14 @@ def _grown_runs(k: Kin, weak: np.ndarray, strong: np.ndarray, min_strong_s: floa
         if ok:
             out.append((float(k.t[i]), float(k.t[j])))
     return out
+
+
+def _clear(k: Kin, margin: float = 4.0) -> np.ndarray:
+    """Samples whose box is clear of the frame border. A box cut by the edge (a car
+    entering under the camera) has a false foot point and a false velocity."""
+    b = k.track.box
+    return ((b[:, 0] > margin) & (b[:, 1] > margin)
+            & (b[:, 2] < scene.CANON[0] - margin) & (b[:, 3] < scene.CANON[1] - margin))
 
 
 def _finish(intervals: list[Interval], duration: float, max_gap: float, min_len: float) -> list[Interval]:
@@ -61,7 +76,10 @@ def jaywalking(ctx: Context) -> list[Interval]:
         # faster than ~4 m/s is a rider on something COCO has no class for (e-scooter), not a pedestrian
         on_foot = k.rel_speed < 2.5
         deep = on_road & on_foot & (scene.road_depth(k.foot) > 0.45 * k.scale)
-        out += _grown_runs(k, on_road, deep, min_strong_s=1.2)
+        found = _grown_runs(k, on_road, deep, min_strong_s=1.2)
+        for s, e in found:
+            ctx.blame(k, s, e)
+        out += found
     return _finish(out, ctx.duration, max_gap=2.0, min_len=1.2)  # stepping over the median is one crossing
 
 
@@ -70,7 +88,7 @@ def failure_to_yield(ctx: Context) -> list[Interval]:
     ped_cw = {p.tid: scene.crosswalk_of(p.foot) for p in peds}
     out = []
     for k in ctx.of(*VEHICLES):
-        cw = scene.crosswalk_of(k.foot)
+        cw = np.where(_clear(k), scene.crosswalk_of(k.foot), -1)
         for c in np.unique(cw[cw >= 0]):
             for i, j in runs(cw == c):
                 t0, t1 = k.t[i], k.t[j]
@@ -79,6 +97,7 @@ def failure_to_yield(ctx: Context) -> list[Interval]:
                     continue  # stopped on the zebra is not "driving through"
                 if _pedestrian_in_path(k, i, j, c, peds, ped_cw):
                     out.append((float(t0), float(t1)))
+                    ctx.blame(k, t0, t1)
     return _finish(out, ctx.duration, max_gap=0.3, min_len=0.4)
 
 
@@ -106,8 +125,10 @@ def red_light(ctx: Context) -> list[Interval]:
             if along < 0.8:
                 continue
             tc = float(k.t[n - 1] + (k.t[n] - k.t[n - 1]) * up[n - 1] / max(up[n - 1] - up[n], 1e-6))
-            # another road user must be waiting at the line both before and after the crossing
-            if not (signals.is_red(tc - 0.5, ctx.reds, k.tid) and signals.is_red(tc + 1.5, ctx.reds, k.tid)):
+            # another vehicle of the same phase group must be waiting at the line both before
+            # and after the crossing (the median lane moves on its own arrow)
+            group = int(signals.phase_group(k.foot[n])[0])
+            if not (signals.is_red(tc - 0.5, ctx.reds, k.tid, group) and signals.is_red(tc + 1.5, ctx.reds, k.tid, group)):
                 continue
             after = np.flatnonzero(k.t >= tc)
             if len(after) == 0:
@@ -116,18 +137,42 @@ def red_light(ctx: Context) -> list[Interval]:
                 k.foot[after], scene.STOP_BOX)
             leave = after[np.argmin(inside)] if (~inside).any() else after[-1]
             out.append((tc, max(float(k.t[leave]), tc + 0.5)))
+            ctx.blame(k, *out[-1])
     return _finish(out, ctx.duration, max_gap=0.0, min_len=0.5)
 
 
 def stop_line(ctx: Context) -> list[Interval]:
+    """Stopped past the stop line on red. A vehicle held there by a stationary vehicle
+    right ahead is spill-back from a blocked junction, not a stop-line violation."""
     out = []
-    for k in ctx.of(*VEHICLES):
+    vehicles = ctx.of(*VEHICLES)
+    for k in vehicles:
         up = signals.distance_upstream(k.foot)
         past = (up < -0.15 * k.scale) & scene.points_in_poly(k.foot, scene.STOP_BOX)
         for i, j in runs(k.still() & past):
-            if k.t[j] - k.t[i] >= 3.0:
-                out.append((float(k.t[i]), float(k.t[j])))
+            if k.t[j] - k.t[i] < 3.0:
+                continue
+            tm = 0.5 * (k.t[i] + k.t[j])
+            group = int(signals.phase_group(k.foot[i])[0])
+            if not signals.is_red(tm, ctx.reds, k.tid, group) or _blocked_ahead(k, i, vehicles):
+                continue
+            out.append((float(k.t[i]), float(k.t[j])))
+            ctx.blame(k, *out[-1])
     return _finish(out, ctx.duration, max_gap=1.0, min_len=3.0)
+
+
+def _blocked_ahead(k: Kin, n: int, vehicles: list[Kin]) -> bool:
+    """A stationary vehicle within 2.5 box heights ahead, in the same lane, when k stops."""
+    d = scene.INBOUND.direction
+    for o in vehicles:
+        if o is k or not (o.t[0] <= k.t[n] <= o.t[-1]):
+            continue
+        m = o.at(k.t[n])
+        rel = o.foot[m] - k.foot[n]
+        ahead, lateral = float(rel @ d), abs(float(d[0] * rel[1] - d[1] * rel[0]))
+        if 0.3 * k.scale[n] < ahead < 2.5 * k.scale[n] and lateral < 0.5 * k.scale[n] and o.still()[m]:
+            return True
+    return False
 
 
 # --------------------------------------------------------------------------- vehicle behaviour
@@ -154,13 +199,18 @@ def wrong_way(ctx: Context) -> list[Interval]:
                 while b < len(zone) - 1 and in_zone[b + 1]:
                     b += 1
                 out.append((float(k.t[a]), float(k.t[b])))
+                ctx.blame(k, *out[-1])
     return _finish(out, ctx.duration, max_gap=1.0, min_len=1.5)
 
 
 def illegal_u_turn(ctx: Context) -> list[Interval]:
+    """Heading reversal while clearly moving. Headings come only from boxes clear of the
+    frame border (a box cut by the edge drags the foot point sideways) and from samples
+    faster than 0.8 bh/s (a creeping car in a queue has a jittery heading), and the turn
+    itself must take at most 12 s at a real driving speed."""
     out = []
     for k in ctx.of(*VEHICLES):
-        moving = k.rel_speed > 0.4
+        moving = (k.rel_speed > 0.8) & _clear(k)
         if moving.sum() < 8 or k.t[-1] - k.t[0] < 3.0:
             continue
         idx = np.flatnonzero(moving)
@@ -178,8 +228,11 @@ def illegal_u_turn(ctx: Context) -> list[Interval]:
         sgn = np.sign(total)
         start = idx[np.argmax(sgn * turn > np.deg2rad(20))]
         end = idx[np.argmax(sgn * turn > abs(total) - np.deg2rad(20))]
+        if k.t[end] - k.t[start] > 12.0 or np.median(k.rel_speed[start:end + 1]) < 0.8:
+            continue
         if scene.on_road(k.foot[start:end + 1]).mean() > 0.8:
             out.append((float(k.t[start]), float(k.t[end])))
+            ctx.blame(k, *out[-1])
     return _finish(out, ctx.duration, max_gap=0.5, min_len=1.5)
 
 
@@ -199,6 +252,7 @@ def solid_line_crossing(ctx: Context) -> list[Interval]:
                 half_w = 0.5 * (k.track.box[n, 2] - k.track.box[n, 0])
                 lead = min(1.5, half_w / lat)
                 out.append((float(k.t[n] - lead), float(k.t[n] + lead)))
+                ctx.blame(k, *out[-1])
     return _finish(out, ctx.duration, max_gap=0.5, min_len=0.5)
 
 
@@ -217,6 +271,7 @@ def stopped_vehicle(ctx: Context) -> list[Interval]:
     a long-parked car often loses and regains its identity.
     """
     vehicles = ctx.of("vehicle")
+    by_tid = {k.tid: k for k in vehicles}
     spells = []
     for k in vehicles:
         allowed = (scene.on_road(k.foot) & ~scene.points_in_poly(k.foot, scene.PARKING)
@@ -243,6 +298,8 @@ def stopped_vehicle(ctx: Context) -> list[Interval]:
     for s, e, pos, scale, tids in merged:
         if e - s >= 10.0 and not _queued(vehicles, tids, s, e, pos, scale):
             out.append((s, ctx.duration if ctx.duration - e < 1.0 else e))
+            for tid in tids:
+                ctx.blame(by_tid[tid], *out[-1])
     return _finish(out, ctx.duration, max_gap=2.0, min_len=10.0)
 
 
@@ -327,6 +384,8 @@ def accident(ctx: Context) -> list[Interval]:
             hit = _collision_end(a, b, tc) or _collision_end(b, a, tc)
             if hit is not None:
                 out.append((tc, hit))
+                ctx.blame(a, tc, hit)
+                ctx.blame(b, tc, hit)
                 break
     return _finish(out, ctx.duration, max_gap=2.0, min_len=0.5)
 
@@ -429,6 +488,8 @@ def near_miss(ctx: Context) -> list[Interval]:
                               for t in np.arange(k.t[i], min(k.t[j] + 2.0, o.t[-1], k.t[-1]), 0.2))
                 if not contact:
                     out.append((float(k.t[max(0, i - 2)]), float(k.t[j] + 1.0)))
+                    ctx.blame(k, *out[-1])
+                    ctx.blame(o, *out[-1])
                     break
     return _finish(out, ctx.duration, max_gap=1.0, min_len=1.0)
 
@@ -437,7 +498,10 @@ def road_obstacle(ctx: Context) -> list[Interval]:
     out = []
     for k in ctx.of("animal"):
         on = scene.on_road(k.foot)
-        out += _grown_runs(k, on, on, min_strong_s=2.0)
+        found = _grown_runs(k, on, on, min_strong_s=2.0)
+        for s, e in found:
+            ctx.blame(k, s, e)
+        out += found
     return _finish(out, ctx.duration, max_gap=2.0, min_len=2.0)
 
 
@@ -463,6 +527,7 @@ def run_rules(ctx: Context, enabled: tuple[str, ...] | None = None) -> list[list
     for label, rule in RULES.items():
         if enabled is not None and label not in enabled:
             continue
+        ctx.label = label
         try:
             found = rule(ctx)
         except Exception:  # noqa: BLE001 - isolate faults per class

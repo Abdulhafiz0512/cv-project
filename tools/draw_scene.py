@@ -1,6 +1,9 @@
 """Render the hand-measured scene layout over a frame (sanity check + website figure).
 
     python tools/draw_scene.py --frame data/frame_4k_0.jpg --out web/assets/scene_layout.jpg
+    python tools/draw_scene.py --frame other_video_frame.jpg --out check.jpg --register
+
+--register first fits the layout to the frame's view (as the pipeline does per video).
 """
 from __future__ import annotations
 
@@ -21,7 +24,12 @@ COLORS = {
 }
 
 
-def draw(frame: np.ndarray) -> np.ndarray:
+def draw(frame: np.ndarray, register: bool = False) -> np.ndarray:
+    if register:
+        from trafficev import view
+        fit = view.register(frame)
+        scene.set_view(fit.H)
+        print(f"registered to {fit.reference or 'nothing (base layout)'} with {fit.inliers} inliers")
     h, w = frame.shape[:2]
     s = np.array([w / scene.CANON[0], h / scene.CANON[1]])
     img = cv2.convertScaleAbs(frame, alpha=1.5, beta=10)
@@ -65,9 +73,10 @@ def main() -> int:
     ap.add_argument("--frame", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--width", type=int, default=1600)
+    ap.add_argument("--register", action="store_true", help="warp the layout to this frame's view first")
     args = ap.parse_args()
     frame = cv2.imread(args.frame)
-    img = draw(frame)
+    img = draw(frame, register=args.register)
     img = cv2.resize(img, (args.width, int(img.shape[0] * args.width / img.shape[1])), interpolation=cv2.INTER_AREA)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(args.out, img, [cv2.IMWRITE_JPEG_QUALITY, 88])

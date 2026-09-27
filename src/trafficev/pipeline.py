@@ -19,7 +19,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import events, runtime, signals
+from . import events, runtime, scene, signals, view
 from .detector import Detector
 from .kinematics import kinematics
 from .tracking import TrackStore, tracks_from_rows
@@ -64,6 +64,7 @@ class Perception:
     rows: dict[int, list]
     lamps: dict[str, np.ndarray]
     complete: bool
+    view: np.ndarray | None = None   # base layout -> this video (see view.py)
 
     def tracks(self):
         return tracks_from_rows(self.rows)
@@ -120,10 +121,13 @@ def perceive(path: str, budget_s: float | None = None, target_fps: float = TARGE
     info = probe(path)
     cached = _cache_load(path) if on_frame is None else None
     if cached is not None:
+        scene.set_view(cached.view)
         return cached
     det = detector or get_detector()
     store = TrackStore(PROC_W, PROC_H)
     lamps = signals.LampMeter()
+    lock = view.ViewLock()
+    scene.reset_view()
     budget = runtime.Budget(budget_s if budget_s is not None else PART_A_SHARE * max(info.duration, 1.0))
     batch_size = 8 if runtime.is_gpu(det.device) else 1
     batch: list[tuple[float, np.ndarray]] = []
@@ -141,6 +145,7 @@ def perceive(path: str, budget_s: float | None = None, target_fps: float = TARGE
         batch.clear()
 
     for t, frame in _frames_async(path, target_fps):
+        lock.update(t, frame)
         n += 1
         if n % 10 == 0 and not runtime.EXACT:  # checked before thinning, so it runs at any thinning level
             if budget.remaining() < 0:
@@ -155,7 +160,7 @@ def perceive(path: str, budget_s: float | None = None, target_fps: float = TARGE
             flush()
     if batch:
         flush()
-    per = Perception(info, np.asarray(times), store.rows, lamps.series(), complete)
+    per = Perception(info, np.asarray(times), store.rows, lamps.series(), complete, lock.H)
     _cache_save(path, per)
     return per
 
@@ -175,9 +180,15 @@ def started(video_id: str) -> float | None:
 
 
 def events_from(per: Perception) -> list[list]:
+    return explain(per)[0]
+
+
+def explain(per: Perception) -> tuple[list[list], list[tuple[str, int, float, float]]]:
+    """Events plus the (label, track id, start, end) evidence behind them."""
+    scene.set_view(per.view)
     kins = [kinematics(tr) for tr in per.tracks()]
     ctx = events.Context(kins, per.info.duration, reds=signals.red_intervals(kins))
-    return events.run_rules(ctx, ENABLED)
+    return events.run_rules(ctx, ENABLED), ctx.evidence
 
 
 # --------------------------------------------------------------------------- dev cache
@@ -189,7 +200,7 @@ def _cache_path(path: str) -> Path | None:
     if not root:
         return None
     st = Path(path).stat()
-    key = hashlib.sha1(f"{Path(path).name}:{st.st_size}".encode()).hexdigest()[:12]
+    key = hashlib.sha1(f"{Path(path).name}:{st.st_size}:{scene.LAYOUT_VERSION}".encode()).hexdigest()[:12]
     return Path(root) / f"{Path(path).stem}_{key}.pkl"
 
 

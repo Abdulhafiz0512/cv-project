@@ -27,7 +27,7 @@ from typing import NamedTuple
 
 import numpy as np
 
-from . import runtime, scene, signals
+from . import runtime, scene, signals, view
 from .labels import COCO_KIND
 from .tracking import TrackStore
 from .video import PROC_H, PROC_W, to_proc
@@ -135,12 +135,16 @@ class CausalRiskModel:
         start = self._video_clock(meta.get("video_id", "")) if self._video_clock else None
         self.t_video = start if start is not None else self.t_reset
         self.slowed = self.stopped = False
+        self.view = view.ViewLock()
+        scene.reset_view()
 
     def step(self, frame: np.ndarray, t_sec: float) -> float:
         self.n += 1
         if self.stopped or (self.n - 1) % self.stride:
             return self._decayed(t_sec)
-        det = self.det([to_proc(frame)])[0]
+        proc = to_proc(frame)
+        self.view.update(t_sec, proc)
+        det = self.det([proc])[0]
         rows = self.store.update(t_sec, det)
         raw = self.cues(t_sec, rows)["risk"]
         self.score = max(raw, self._decayed(t_sec))
@@ -252,19 +256,24 @@ class CausalRiskModel:
         return best
 
     def _red(self, t: float, motions: dict[int, Motion]) -> float:
-        waiting, crossing = False, 0.0
+        """A vehicle crossing the line fast while another of its phase group waits at it."""
+        waiting: set[int] = set()            # phase groups with a vehicle waiting at the line
+        crossers: list[tuple[int, float]] = []
         for tid, m in motions.items():
             if m.kind not in MOVERS:
                 continue
             up = float(signals.distance_upstream(m.foot)[0])
+            group = int(signals.phase_group(m.foot)[0])
             st = self.states[tid]
             near = -0.3 * m.scale < up < 2.2 * m.scale and scene.points_in_poly(m.foot[None], scene.QUEUE_ZONE)[0]
             if near and m.speed < 0.12:
                 st.stopped_since = st.stopped_since or t
-                waiting |= t - st.stopped_since > signals.MIN_WAIT_S
+                if t - st.stopped_since > signals.MIN_WAIT_S:
+                    waiting.add(group)
             else:
                 st.stopped_since = None
             along = float(m.vel @ scene.INBOUND.direction) / m.scale
             if -1.5 * m.scale < up < 0.5 * m.scale and along > 2.0:
-                crossing = max(crossing, _sigmoid((along - 3.0) / 0.7))
-        return 0.3 * crossing if waiting else 0.0
+                crossers.append((group, _sigmoid((along - 3.0) / 0.7)))
+        crossing = max((p for g, p in crossers if g in waiting), default=0.0)
+        return 0.3 * crossing

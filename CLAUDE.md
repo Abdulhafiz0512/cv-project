@@ -15,7 +15,7 @@ approach; this file is the working brief for continuing the project.
 ```bash
 python -m venv .venv
 .venv/Scripts/python -m pip install -r requirements-dev.txt      # Linux/macOS: .venv/bin/python
-.venv/Scripts/python -m pytest -q                                # 19 tests must pass
+.venv/Scripts/python -m pytest -q                                # 24 tests must pass
 ```
 
 ## Status (2026-09-27)
