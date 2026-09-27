@@ -145,8 +145,11 @@
     <p>We did not train a model. With no labels for this camera, we decided early that rules we can read and
       test would beat a classifier we could not validate. So the system is a pretrained detector (YOLO26-S) and a
       tracker (ByteTrack) that turn the video into trajectories, then one rule per event class that looks at those
-      trajectories against a map of the junction we measured by hand. Part B is a separate pass that only ever
-      sees past frames and scores how close road users are to colliding.</p>
+      trajectories against a map of the junction. The map is fitted to the paint and kerbs of one video and
+      warped onto every other video after registering its view, because the framing changes between recordings.
+      Part B is a separate pass that only ever sees past frames and scores how close road users are to colliding.
+      In the end we ran the whole pipeline, through the organizers' unchanged harness, on all four sample videos:
+      18 minutes of footage, 87 events, every video inside the time limit.</p>
 
     <h3>What went wrong, and what we changed</h3>
     <p><strong>We could barely get the data.</strong> The four sample videos are raw camera files, 2.3 to 6.2 GB
@@ -154,7 +157,9 @@
       "Quota exceeded", because every team was pulling the same links. We found that small byte-range requests
       still went through, so we wrote a little proxy that feeds ffmpeg in bounded chunks and transcodes on the fly.
       It got us the first 12 seconds of C3905 before Drive closed completely. Most of the development was done on
-      those 12 seconds plus synthetic trajectories in our tests.</p>
+      those 12 seconds plus synthetic trajectories in our tests. Later the full C3896, C3902 and C3905 files
+      arrived on a machine with enough disk, and C3897 as a 720p copy (the resolution the pipeline works at
+      anyway), so every result on this page now comes from the complete videos.</p>
     <p><strong>Our first run was over the time limit.</strong> The 12-second clip took 37.3 s against a 36.1 s
       budget. We assumed the detector was the problem, but profiling showed it was decoding: the camera writes
       4K, 10-bit, 4:2:2 video at about 147 Mbit/s, and the organizers' harness decodes every frame again for Part
@@ -181,23 +186,48 @@
       the near-miss rule used a NumPy call that raises an error on 2-D vectors in NumPy 2. Any video with a car
       braking hard would have crashed Part A and been scored as empty. We fixed it and now run every rule in
       isolation, so one broken rule cannot take the others down.</p>
-    <p><strong>The camera is not framed the same way twice.</strong> Once all four samples were in, the stop
-      line we had measured on the C3905 clip sat 25 px off on C3896, and C3902 is zoomed out further still. The
-      organizers call it the same camera and angle, but the framing moves between recordings, and the test videos
-      will move too. So we stopped treating the layout as fixed: we refitted it to the paint and kerbs of C3896
-      (the stop line, the zebras, the south zebra as the fan it really is, and an island that was 35 px off), and
-      every video is now registered to two reference backgrounds on its first frames and gets the layout warped
-      into its own view. On C3905 the warped stop line lands within a pixel of the paint.</p>
-    <p><strong>Watching our own renders found more false alarms than any test.</strong> With all four videos
-      annotated, we looked at every long or clustered event. Every red_light was a car in the lane by the median,
-      which moves on its own arrow while the other lanes wait, so red evidence now only counts within a phase
-      group. Most stop_line events were cars held past the line by a jammed junction. All five U-turns were cars
-      creeping in a queue or entering at the edge of the frame. Fixing those three cut the events on C3896 from
-      34 to 21, and the render now marks the exact road user each event is about, which is what made the review
-      possible.</p>
     <p><strong>A courier is not a car.</strong> The only failure_to_yield on our clip turned out to be a delivery
       rider moving slowly along a zebra with pedestrians. Two-wheelers now need riding speed to count, and a person
       moving faster than about 4 m/s is treated as a scooter rider, not a pedestrian.</p>
+    <p><strong>The stop line was in the wrong place.</strong> On the first full video the red stop line in our
+      render ran through the zebra instead of along the paint in front of the waiting cars. Two things were wrong.
+      Our map had been drawn on the C3905 clip, and even there its far end was 14 px low. And the camera is not
+      framed the same way twice: C3896 is zoomed and panned against C3905 by about 25 px, and C3902 differs by
+      more than 60 px. The organizers call it the same camera and angle, so the test videos will move too. We
+      refitted the map to the markings of C3896 by fitting lines to the paint on a background with the traffic
+      removed. That fixed the stop line, the zebras (the south one is a fan, wider towards the camera, not a
+      rectangle) and an island that was 35 px off. Then we stopped treating the map as fixed. Each video is
+      matched to two reference backgrounds (a day one and a dusk one) on its first frames with SIFT features, and
+      the map is warped into that video's view. It takes a quarter of a second per video. Warping the C3905 paint
+      into C3896 lands within half a pixel of where we measured it directly, and on C3902, the most shifted video,
+      the stop line, zebras and islands all land on the paint.</p>
+    <p><strong>Every car was the same colour.</strong> Our review video coloured boxes by object type, so every
+      car was yellow, and there was no way to see which car an event was about. Each rule now records the road
+      users it fired on, and the render draws that one thick, in the event's colour, with the event's name. We also
+      found the review video ran about 1.3 times too fast, because the decoder hands over frames unevenly; it now
+      holds each frame on a fixed clock and plays in real time. Both changes are what made the next step possible.</p>
+    <p><strong>Watching our own renders found more false alarms than any test.</strong> We went through every
+      long or clustered event on all four videos.</p>
+    <ul>
+      <li><em>red_light:</em> every one was a car in the lane by the median. That lane moves on its own arrow: in
+        C3896 all 20 of its crossings happened while the other lanes were waiting, while the other lanes almost
+        never crossed with anyone waiting (at most 4 of their 43 crossings). Red evidence now only counts from a car in the same phase group.</li>
+      <li><em>stop_line:</em> most were cars held past the line because the junction ahead was jammed. The rule
+        now needs a red for its lanes and no stationary car directly in front.</li>
+      <li><em>illegal_u_turn:</em> all five were fake. Cars creeping in a queue have a jittery heading that adds up
+        to 150°, and a car entering under the camera has its box cut by the frame, which drags its ground point
+        sideways. Headings now come only from clearly moving cars fully inside the frame.</li>
+      <li><em>failure_to_yield and near_miss:</em> the same frame-edge effect. A box shrinking as a car leaves the
+        picture looks like hard braking, and one cut by the bottom edge puts the car on the zebra. Both rules now
+        ignore boxes that touch the border, and a near miss needs a pedestrian or a moving vehicle ahead, not a
+        parked car.</li>
+      <li><em>jaywalking:</em> we suspected the far kerb by the bus stop, where people stand still for a long time.
+        On the frames the kerb in our map was right; one man really was standing out in the road, so we left the
+        rule alone.</li>
+    </ul>
+    <p>On C3896 these fixes took the output from 51 events to 20. Every one we removed was a false alarm we had
+      looked at; the ones that stayed include a car driving through the west zebra while pedestrians crossed on
+      red.</p>
 
     <h3>What worked</h3>
     <p>Measuring speed in "box heights per second" instead of pixels was the most useful single idea: it cancels
@@ -206,12 +236,19 @@
       condition for the core of an event and a looser one for its edges gives segment boundaries that follow the
       annotation rules instead of the moment a threshold trips. Running the detector at 1280 px mattered: at 960 px
       it found 42% fewer pedestrians (15.1 vs 26.1 per frame), mostly the crowd at the far bus stop.</p>
+    <p>Registering each video to a reference view made the map trustworthy on videos we had never measured.
+      Measuring lanes across the direction of traffic, not along the stop line, separated the five inbound lanes
+      cleanly (57 px apart, with clear gaps), which is what let us see the median lane's own phase. And the single
+      most productive tool was a render that shows exactly which road user each event is about: every rule fix in
+      the last round came from watching it.</p>
 
     <h3>What did not</h3>
     <p>We still have no labelled dev set, so we cannot give you an F1 score, and every threshold is our best
-      judgement checked by eye on the renders rather than a tuned value. failure_to_yield fires often on C3902
-      and C3905; the cases we checked were a mix of drivers who really did not yield and borderline ones that only
-      labels can settle. We do not predict illegal_turn or fire_smoke: we could not make them
+      judgement checked by eye on the renders rather than a tuned value. failure_to_yield is our most frequent
+      class (43 of 87 events); the cases we checked were a mix of drivers who really did not yield and borderline
+      ones that only labels can settle. The risk score's highest peak, 0.87 on C3902, was a delivery motorbike
+      cutting in front of a car: a real conflict, but not a collision, so the metric counts it as a false alarm.
+      C3897 is only available to us as a 720p copy. We do not predict illegal_turn or fire_smoke: we could not make them
       reliable from this view, and the metric punishes predicting a class that never occurs. The accident and
       near-miss rules have never seen a real collision from this camera. And the line between "crossing next to
       the zebra" and "jaywalking" is still a judgement call.</p>
@@ -224,6 +261,30 @@
       ground-plane calibration from the zebra and lane markings would give us speeds in metres and a better risk
       score.</p>
     <h3>Measurements</h3>
+    <p>Run time through the organizers' harness with the reference settings (1280 px detector, 10 fps for Part A,
+      5 Hz for Part B), one uncached run per video on our laptop with an RTX 2050 (4 GB) GPU. The limit is 3× the
+      video's length. Part B is the larger share because the harness decodes every 4K frame for it.</p>
+    <div class="table-scroll">
+      <table class="events"><caption>Run time on the sample videos</caption>
+        <thead><tr><th scope="col">Video</th><th scope="col">Length</th><th scope="col">Part A</th>
+          <th scope="col">Part B</th><th scope="col">Total</th><th scope="col">× length</th></tr></thead>
+        <tbody>
+          <tr><td>C3896</td><td>340 s</td><td>126 s</td><td>237 s</td><td>363 s</td><td>1.07×</td></tr>
+          <tr><td>C3897 (720p)</td><td>318 s</td><td>146 s</td><td>234 s</td><td>380 s</td><td>1.20×</td></tr>
+          <tr><td>C3902</td><td>318 s</td><td>123 s</td><td>358 s</td><td>480 s</td><td>1.51×</td></tr>
+          <tr><td>C3905</td><td>128 s</td><td>45 s</td><td>80 s</td><td>125 s</td><td>0.98×</td></tr>
+        </tbody>
+      </table>
+      <table class="events"><caption>Events on C3896 through each round of fixes</caption>
+        <thead><tr><th scope="col">Round</th><th scope="col">Events</th><th scope="col">What changed</th></tr></thead>
+        <tbody>
+          <tr><td>Map drawn on the C3905 clip</td><td>51</td><td>15 failure_to_yield, 7 solid_line_crossing</td></tr>
+          <tr><td>Map refitted, views registered</td><td>34</td><td>zebras and the median line in the right place</td></tr>
+          <tr><td>Phase groups, spill-back, U-turn</td><td>21</td><td>red_light 5→3, stop_line 7→1, illegal_u_turn 5→0</td></tr>
+          <tr><td>Frame-edge boxes</td><td>20</td><td>failure_to_yield 5→4</td></tr>
+        </tbody>
+      </table>
+    </div>
     <p>Ablations on a 12-second native 4K clip of C3905, measured on our CPU-only laptop with <code>tools/ablation.py</code>.
       The submission uses the first row and the first decoder.</p>
     <div class="table-scroll">
