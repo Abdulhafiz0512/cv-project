@@ -25,7 +25,7 @@ apt-get install -y -q git python3 python3-venv python3-pip curl debian-keyring d
 
 echo "== code"
 if [ -d "$APP_DIR/.git" ]; then
-  git -C "$APP_DIR" pull --ff-only
+  git -c safe.directory="$APP_DIR" -C "$APP_DIR" pull --ff-only   # the repo is owned by the demo user
 else
   git clone --depth 1 "$REPO" "$APP_DIR"
 fi
