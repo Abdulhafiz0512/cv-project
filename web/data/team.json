@@ -4,7 +4,15 @@
       "name": "Abdulkhafiz Yoqubjonov",
       "role": "Computer vision pipeline and website",
       "bio": "Student at New Uzbekistan University. Full-stack developer (React, Next.js, TypeScript, Vue) who builds AI agents, and took on applied computer vision for this hackathon.",
-      "skills": ["Python", "PyTorch / Ultralytics", "OpenCV", "React", "Next.js", "TypeScript", "Vue"],
+      "skills": [
+        "Python",
+        "PyTorch / Ultralytics",
+        "OpenCV",
+        "React",
+        "Next.js",
+        "TypeScript",
+        "Vue"
+      ],
       "contributions": [
         "Decode, detection and tracking pipeline that fits the 3x time budget on 4K video",
         "Hand-measured scene layout and the rules for the twelve predicted classes",
@@ -19,29 +27,73 @@
       "linkedin": "",
       "portfolio": "",
       "projects": [
-        {"name": "medX", "url": "https://med-x-nine.vercel.app", "repo": "https://github.com/Abdulhafiz0512/medX", "about": "Medical web app (JavaScript)"},
-        {"name": "Tower game", "url": "https://tower-game-nine.vercel.app", "repo": "https://github.com/Abdulhafiz0512/tower-game", "about": "Browser stacking game"},
-        {"name": "foothub", "url": "", "repo": "https://github.com/Abdulhafiz0512/foothub", "about": "Python project"}
+        {
+          "name": "medX",
+          "url": "https://med-x-nine.vercel.app",
+          "repo": "https://github.com/Abdulhafiz0512/medX",
+          "about": "Medical web app (JavaScript)"
+        },
+        {
+          "name": "Tower game",
+          "url": "https://tower-game-nine.vercel.app",
+          "repo": "https://github.com/Abdulhafiz0512/tower-game",
+          "about": "Browser stacking game"
+        },
+        {
+          "name": "foothub",
+          "url": "",
+          "repo": "https://github.com/Abdulhafiz0512/foothub",
+          "about": "Python project"
+        }
       ]
     },
     {
       "name": "Kamronbek Mamaroziqov",
       "role": "ML engineer: data, evaluation and model verification",
       "bio": "AI and Robotics student at New Uzbekistan University (2023–2027) and AI Engineer at NeuronAI, where he post-trains small Qwen language models for Uzbek. Previously worked on computer vision and data collection at zehnmind.ai.",
-      "skills": ["Python", "Machine learning", "Computer vision", "NLP / LLM post-training", "SQL", "Data analysis", "LangGraph"],
+      "skills": [
+        "Python",
+        "Machine learning",
+        "Computer vision",
+        "NLP / LLM post-training",
+        "SQL",
+        "Data analysis",
+        "LangGraph"
+      ],
       "contributions": [],
       "responsibilities": [
         "Dev set: labelling the sample videos with the organizers' start/end conventions",
         "Evaluation and error analysis: per-class F1 at IoU 0.3/0.5/0.7, confusion between classes, ablation tables",
         "Rare-event verification: a small open vision-language model (Qwen-VL class) that double-checks accident and fire candidates within the time budget"
       ],
-      "github": "",
-      "linkedin": "",
-      "portfolio": "",
+      "github": "https://github.com/kmamaroziqov",
+      "linkedin": "https://www.linkedin.com/in/kmamaroziqov/",
+      "portfolio": "https://kmamaroziqov.github.io",
       "projects": [
-        {"name": "Uzbek small LLMs at NeuronAI", "url": "", "repo": "", "about": "continued pre-training and supervised fine-tuning of Qwen 2B/4B models for Uzbek"},
-        {"name": "RAG chatbot at BIKAL TECH", "url": "", "repo": "", "about": "retrieval-augmented chatbot architecture"},
-        {"name": "Operations dashboards at ACWA Power", "url": "", "repo": "", "about": "Power BI and SQL dashboards for key metrics"}
+        {
+          "name": "Object-Detection",
+          "url": "",
+          "repo": "https://github.com/kmamaroziqov/Object-Detection",
+          "about": "object detection notebooks"
+        },
+        {
+          "name": "llm-benchmark-dashboard",
+          "url": "",
+          "repo": "https://github.com/kmamaroziqov/llm-benchmark-dashboard",
+          "about": "dashboard for LLM benchmark results"
+        },
+        {
+          "name": "fine-tuning",
+          "url": "",
+          "repo": "https://github.com/kmamaroziqov/fine-tuning",
+          "about": "LLM fine-tuning work behind the Uzbek Qwen models"
+        },
+        {
+          "name": "transcribe-bot",
+          "url": "",
+          "repo": "https://github.com/kmamaroziqov/transcribe-bot",
+          "about": "speech transcription bot"
+        }
       ]
     },
     {
