@@ -38,6 +38,15 @@ python3 -m venv "$APP_DIR/.venv"
 chown -R demo:demo "$APP_DIR"
 
 echo "== service"
+# Demo settings live in /etc/default/$SERVICE (kept across re-runs). On small machines start
+# lighter: short clips, a 640 px detector and 3 fps, so a visitor waits minutes, not a quarter hour.
+if [ ! -f /etc/default/$SERVICE ]; then
+  if [ "$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)" -lt 3000 ]; then
+    printf 'DEMO_MAX_SECONDS=30\nDEMO_IMGSZ=640\nDEMO_FPS=3\n' > /etc/default/$SERVICE
+  else
+    : > /etc/default/$SERVICE
+  fi
+fi
 cat >/etc/systemd/system/$SERVICE.service <<EOF
 [Unit]
 Description=Junction Watch live demo
@@ -47,6 +56,7 @@ After=network-online.target
 User=demo
 WorkingDirectory=$APP_DIR
 Environment=YOLO_OFFLINE=1 GRADIO_ANALYTICS_ENABLED=False HOME=$APP_DIR
+EnvironmentFile=-/etc/default/$SERVICE
 ExecStart=$APP_DIR/.venv/bin/python demo/app.py --host 127.0.0.1 --port 7860
 Restart=always
 RestartSec=5

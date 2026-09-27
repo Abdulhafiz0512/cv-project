@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -32,7 +33,8 @@ from trafficev.detector import Detector  # noqa: E402
 from trafficev.risk import CausalRiskModel  # noqa: E402
 from trafficev.video import probe  # noqa: E402
 
-MAX_SECONDS = 90
+# Small hosts override these through the environment (deploy/setup_vm.sh writes them).
+MAX_SECONDS = int(os.environ.get("DEMO_MAX_SECONDS", 90))
 MAX_MB = 800
 WORK_HEIGHT = 720   # larger uploads (the camera writes 4K) are shrunk first: decoding dominates on a CPU
 
@@ -44,11 +46,14 @@ def detector() -> Detector:
     if _detector is None:
         from trafficev import runtime
 
-        _detector = Detector(imgsz=1280 if runtime.is_gpu(runtime.device()) else 960)
+        default = 1280 if runtime.is_gpu(runtime.device()) else 960
+        _detector = Detector(imgsz=int(os.environ.get("DEMO_IMGSZ", default)))
     return _detector
 
 
 def demo_fps() -> float:
+    if "DEMO_FPS" in os.environ:
+        return float(os.environ["DEMO_FPS"])
     return pipeline.TARGET_FPS if detector().device != "cpu" else 4.0
 
 
